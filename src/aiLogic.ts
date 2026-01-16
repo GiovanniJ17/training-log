@@ -1,22 +1,19 @@
-// FILE: src/aiLogic.ts
 const apiKey = import.meta.env.VITE_GEMINI_API_KEY || "";
 
-// --- FUNZIONE 1: ANALISI TESTO ---
+// --- FUNZIONE 1: ANALISI TESTO (Inserimento) ---
 export async function analyzeWorkout(text: string) {
   if (!apiKey) throw new Error("Chiave API mancante.");
 
   try {
-    const modelName = await getBestModel();
+    const modelName = "gemini-1.5-flash"; 
     const today = new Date();
     const todayString = today.toLocaleDateString('it-IT', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
     
-    // Prompt ottimizzato per il parsing
     const prompt = `
       Sei un coach di atletica esperto. Analizza il testo e estrai UNA O PIÙ sessioni di allenamento.
       
       CONTESTO TEMPORALE:
       Oggi è: ${todayString}.
-      Se l'utente scrive un giorno (es. "Lunedì"), calcola la data di QUESTA settimana.
       
       TESTO UTENTE: "${text}"
 
@@ -70,11 +67,11 @@ export async function analyzeWorkout(text: string) {
   }
 }
 
-// --- FUNZIONE 2: COACH INTELLIGENCE (Questa mancava!) ---
+// --- FUNZIONE 2: COACH INTELLIGENCE (Per le statistiche) ---
 export async function getCoachAdvice(stats: any) {
   if (!apiKey) return "Chiave API mancante.";
   try {
-    const modelName = await getBestModel();
+    const modelName = "gemini-1.5-flash";
     const generateUrl = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
 
     const prompt = `
@@ -84,7 +81,6 @@ export async function getCoachAdvice(stats: any) {
       DATI ATLETA:
       - Sessioni totali: ${stats.totalSessions}
       - RPE Medio: ${stats.avgRpe}/10
-      - Distribuzione: ${JSON.stringify(stats.typeBreakdown)}
       - Metri corsi totali: ${stats.totalDistance}m
       - Volume sollevato: ${stats.totalVolume}kg
       
@@ -107,11 +103,6 @@ export async function getCoachAdvice(stats: any) {
   } catch (error) {
     return "Impossibile contattare il coach al momento.";
   }
-}
-
-// Helpers
-async function getBestModel() {
-  return "gemini-1.5-flash"; 
 }
 
 function cleanAndParseJSON(text: string) {
