@@ -33,17 +33,25 @@ export default {
       const body = await request.json();
       const { provider, messages, model, apiKey } = body;
 
-      if (!provider || !apiKey) {
-        return new Response(JSON.stringify({ error: 'Provider e API key sono obbligatori' }), {
+      if (!provider) {
+        return new Response(JSON.stringify({ error: 'Provider è obbligatorio' }), {
           status: 400,
           headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' }
         });
       }
 
+      const resolvedApiKey = apiKey || env.GEMINI_API_KEY;
+
       let result;
 
       if (provider === 'gemini') {
-        result = await callGemini(messages, model || 'gemini-2.5-flash', apiKey);
+        if (!resolvedApiKey) {
+          return new Response(JSON.stringify({ error: 'Gemini API key non configurata' }), {
+            status: 500,
+            headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' }
+          });
+        }
+        result = await callGemini(messages, model || 'gemini-2.5-flash', resolvedApiKey);
       } else if (provider === 'openai') {
         result = await callOpenAI(messages, model || 'gpt-4o', apiKey);
       } else if (provider === 'anthropic') {

@@ -174,10 +174,11 @@ function buildProxyRequest(provider, userPrompt) {
   };
 
   if (provider === 'gemini') {
+    const isProd = import.meta.env.MODE === 'production';
     return {
       ...baseRequest,
       model: 'gemini-2.5-flash',
-      apiKey: import.meta.env.VITE_GEMINI_API_KEY
+      ...(isProd ? {} : { apiKey: import.meta.env.VITE_GEMINI_API_KEY })
     };
   }
   if (provider === 'groq') {
