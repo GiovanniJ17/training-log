@@ -43,7 +43,7 @@ export default {
       let result;
 
       if (provider === 'gemini') {
-        result = await callGemini(messages, model || 'gemini-1.5-flash', apiKey);
+        result = await callGemini(messages, model || 'gemini-2.5-flash', apiKey);
       } else if (provider === 'openai') {
         result = await callOpenAI(messages, model || 'gpt-4o', apiKey);
       } else if (provider === 'anthropic') {
