@@ -3,19 +3,6 @@ type = "javascript"
 compatibility_date = "2024-01-01"
 pages_build_output_dir = "dist"
 
-# Cloudflare Pages Environment Variables
-# Configure these in the Cloudflare Pages dashboard Settings > Environment Variables
-#
-# Required:
-# - VITE_SUPABASE_URL: Your Supabase project URL
-# - VITE_SUPABASE_ANON_KEY: Your Supabase anon key
-# - VITE_AI_PROVIDER: "cloudflare" (recommended, free)
-# 
-# For Cloudflare Workers AI:
-# - VITE_CLOUDFLARE_ACCOUNT_ID: Your Cloudflare account ID
-# - VITE_CLOUDFLARE_API_TOKEN: Your Cloudflare API token
-#
-# Optional (for alternative providers):
-# - VITE_OPENAI_API_KEY: For OpenAI GPT-4o
-# - VITE_ANTHROPIC_API_KEY: For Anthropic Claude
+[env.production]
+vars = { VITE_SUPABASE_URL = "https://nusfjbqxuqxynpdyqbcm.supabase.co", VITE_SUPABASE_ANON_KEY = "sb_publishable_lspCyoV98jMHB5_k3_L5qw_D3fQqCV5", VITE_AI_PROVIDER = "cloudflare", VITE_CLOUDFLARE_ACCOUNT_ID = "9071c4f96e81d14a58b223d020644dbc", VITE_CLOUDFLARE_API_TOKEN = "8TI8RSG0RjJic_qKnl2znP6VXmJEf84Nzb5Yblq3" }
 
