@@ -122,6 +122,7 @@ const WEEKDAY_INDEX = {
 };
 
 function startOfWeek(date = new Date()) {
+  // Usa il timezone locale per evitare shift di un giorno in ISO
   const d = new Date(date);
   const day = d.getDay(); // 0 = Sunday, 1 = Monday
   const diff = day === 0 ? -6 : 1 - day;
@@ -130,12 +131,19 @@ function startOfWeek(date = new Date()) {
   return d;
 }
 
+function formatLocalDate(date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
 function dateForWeekday(weekday, reference = new Date()) {
   const weekStart = startOfWeek(reference);
   const targetIndex = WEEKDAY_INDEX[weekday.toLowerCase()] ?? 1;
   const result = new Date(weekStart);
   result.setDate(weekStart.getDate() + targetIndex - 1);
-  return result.toISOString().split('T')[0];
+  return formatLocalDate(result);
 }
 
 function findDayChunks(text) {
@@ -468,7 +476,7 @@ export async function parseTrainingWithAI(trainingText, referenceDate = new Date
   }
 
   // Caso singolo giorno → data = oggi/reference
-  const singleDate = new Date(referenceDate).toISOString().split('T')[0];
+  const singleDate = formatLocalDate(new Date(referenceDate));
   const parsed = await parseSingleDay({ text: trimmed, date: singleDate, titleHint: null });
   return { sessions: [parsed] };
 }
