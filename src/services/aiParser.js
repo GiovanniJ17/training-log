@@ -233,10 +233,13 @@ ${jsonTemplate}
 
 Return ONLY valid JSON. Do not include markdown or explanations.`;
   
-  // Usa il Cloudflare Worker endpoint se in production, altrimenti localhost
-  const proxyUrl = import.meta.env.MODE === 'production'
-    ? '/api/ai-proxy' // Cloudflare Pages route
-    : 'http://localhost:5000';
+  // Usa il proxy appropriato in base all'ambiente
+  let proxyUrl = 'http://localhost:5000'; // Default: local dev
+  
+  if (import.meta.env.MODE === 'production') {
+    // In production su Cloudflare Pages, usa il worker standalone
+    proxyUrl = import.meta.env.VITE_WORKER_URL || 'https://training-log-ai-proxy.giovanni-jecha.workers.dev';
+  }
   
   const response = await fetch(proxyUrl, {
     method: 'POST',
