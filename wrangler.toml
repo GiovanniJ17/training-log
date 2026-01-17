@@ -1,0 +1,13 @@
+name = "training-log"
+compatibility_date = "2024-01-01"
+pages_build_output_dir = "dist"
+
+[build]
+command = "npm run build"
+
+# Cloudflare Pages Environment Variables
+# Configura queste variabili nel dashboard di Cloudflare Pages:
+# - VITE_SUPABASE_URL
+# - VITE_SUPABASE_ANON_KEY  
+# - VITE_AI_API_KEY
+# - VITE_AI_PROVIDER

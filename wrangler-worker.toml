@@ -1,0 +1,12 @@
+name = "training-log-ai-proxy"
+compatibility_date = "2024-01-01"
+main = "src/workers/aiProxy.js"
+
+[env.development]
+routes = [
+  { pattern = "http://localhost:8787/*", zone_name = "localhost" }
+]
+
+[[r2_buckets]]
+binding = "BUCKET"
+bucket_name = "training-log"

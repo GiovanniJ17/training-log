@@ -1,0 +1,35 @@
+{
+  "name": "training-log",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "proxy": "node api-proxy-server.js",
+    "worker:dev": "wrangler dev src/workers/aiProxy.js --local",
+    "build": "vite build",
+    "preview": "vite preview",
+    "pages:build": "npm run build",
+    "pages:dev": "wrangler pages dev --compatibility-date=2024-01-01 -- npm run dev",
+    "setup": "node scripts/setup.js",
+    "check-env": "node scripts/check-env.js"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.90.1",
+    "cors": "^2.8.5",
+    "date-fns": "^4.1.0",
+    "express": "^5.2.1",
+    "lucide-react": "^0.562.0",
+    "react": "^19.2.3",
+    "react-dom": "^19.2.3"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.27",
+    "@types/react-dom": "^18.3.7",
+    "@vitejs/plugin-react": "^5.1.2",
+    "autoprefixer": "^10.4.23",
+    "postcss": "^8.5.6",
+    "tailwindcss": "^3.4.1",
+    "vite": "^7.3.1",
+    "wrangler": "^4.35.0"
+  }
+}
