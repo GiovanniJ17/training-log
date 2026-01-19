@@ -107,3 +107,122 @@ CREATE TABLE public.workout_sets (
   CONSTRAINT workout_sets_pkey PRIMARY KEY (id),
   CONSTRAINT workout_sets_group_id_fkey FOREIGN KEY (group_id) REFERENCES public.workout_groups(id)
 );
+
+-- ============================================================================
+-- TABELLA PER STATISTICHE MENSILI PRE-CALCOLATE
+-- ============================================================================
+CREATE TABLE public.monthly_stats (
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),
+  year_month date NOT NULL,
+  total_distance_km numeric DEFAULT 0,
+  total_time_h numeric DEFAULT 0,
+  total_sets integer DEFAULT 0,
+  avg_rpe numeric DEFAULT 0,
+  sessions_count integer DEFAULT 0,
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT monthly_stats_pkey PRIMARY KEY (id),
+  CONSTRAINT monthly_stats_unique_month UNIQUE (year_month)
+);
+
+-- ============================================================================
+-- TRIGGER PER SINCRONIZZARE I PERSONAL BEST (race_records)
+-- ============================================================================
+-- Questo trigger scatta quando viene inserito o modificato un workout_set
+-- Se è una corsa veloce e il tempo è migliore del record, aggiorna race_records
+
+CREATE OR REPLACE FUNCTION check_and_update_pb()
+RETURNS TRIGGER AS $$
+DECLARE
+  session_id_var uuid;
+  existing_pb_time numeric;
+BEGIN
+  -- Recupera l'ID della sessione dal gruppo di allenamento
+  SELECT session_id INTO session_id_var
+  FROM public.workout_groups
+  WHERE id = NEW.group_id;
+
+  -- Se è una corsa veloce (sprint) con distanza e tempo
+  IF NEW.category = 'sprint' AND NEW.distance_m IS NOT NULL AND NEW.time_s IS NOT NULL THEN
+    
+    -- Controlla se esiste già un PB per questa distanza
+    SELECT time_s INTO existing_pb_time
+    FROM public.race_records
+    WHERE distance_m = NEW.distance_m
+    LIMIT 1;
+
+    -- Se non esiste un PB o il nuovo tempo è migliore
+    IF existing_pb_time IS NULL THEN
+      -- Inserisce un nuovo race_record
+      INSERT INTO public.race_records (session_id, distance_m, time_s, is_personal_best)
+      VALUES (session_id_var, NEW.distance_m::integer, NEW.time_s, true);
+    
+    ELSIF NEW.time_s < existing_pb_time THEN
+      -- Aggiorna il PB esistente
+      UPDATE public.race_records
+      SET time_s = NEW.time_s, session_id = session_id_var, is_personal_best = true
+      WHERE distance_m = NEW.distance_m;
+    END IF;
+  END IF;
+
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER update_pb_trigger
+AFTER INSERT OR UPDATE ON public.workout_sets
+FOR EACH ROW
+EXECUTE FUNCTION check_and_update_pb();
+
+-- ============================================================================
+-- TRIGGER PER MANTENERE SINCRONIZZATE LE STATISTICHE MENSILI
+-- ============================================================================
+-- Questo trigger scatta quando viene inserito o modificato un workout_set
+-- Aggiorna il totale mensilità nella tabella monthly_stats
+
+CREATE OR REPLACE FUNCTION update_monthly_stats()
+RETURNS TRIGGER AS $$
+DECLARE
+  session_date_var date;
+  month_start date;
+  total_distance numeric;
+  total_time numeric;
+  total_sets_count integer;
+BEGIN
+  -- Recupera la data della sessione
+  SELECT date INTO session_date_var
+  FROM public.training_sessions
+  WHERE id = (SELECT session_id FROM public.workout_groups WHERE id = NEW.group_id);
+
+  -- Calcola il primo giorno del mese
+  month_start := date_trunc('month', session_date_var)::date;
+
+  -- Calcola i totali per il mese
+  SELECT 
+    COALESCE(SUM(distance_m), 0) / 1000.0,
+    COALESCE(SUM(time_s), 0) / 3600.0,
+    COALESCE(COUNT(*), 0)
+  INTO total_distance, total_time, total_sets_count
+  FROM public.workout_sets ws
+  JOIN public.workout_groups wg ON ws.group_id = wg.id
+  JOIN public.training_sessions ts ON wg.session_id = ts.id
+  WHERE DATE_TRUNC('month', ts.date)::date = month_start;
+
+  -- Inserisce o aggiorna il record mensilità
+  INSERT INTO public.monthly_stats (year_month, total_distance_km, total_time_h, total_sets, updated_at)
+  VALUES (month_start, total_distance, total_time, total_sets_count, now())
+  ON CONFLICT (year_month)
+  DO UPDATE SET
+    total_distance_km = total_distance,
+    total_time_h = total_time,
+    total_sets = total_sets_count,
+    updated_at = now();
+
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER update_stats_trigger
+AFTER INSERT OR UPDATE ON public.workout_sets
+FOR EACH ROW
+EXECUTE FUNCTION update_monthly_stats();
