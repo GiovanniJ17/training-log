@@ -243,48 +243,43 @@ ${jsonTemplate}
 
 Return ONLY valid JSON. Do not include markdown or explanations.`;
   
-  // TEMPORANEO: Chiamata diretta a Gemini dal browser (solo per testing)
-  // In produzione dovresti usare un proxy per nascondere la chiave API
-  const apiKey = devApiKey && devApiKey.trim().length > 10 
-    ? devApiKey.trim() 
-    : import.meta.env.VITE_GEMINI_API_KEY;
+  // ✅ USA IL WORKER PROXY (chiave API nascosta lato server, sicuro)
+  let workerUrl = 'http://localhost:5000'; // Local dev
   
-  if (!apiKey) {
-    throw new Error('API key Gemini non configurata. Inseriscila in Modalità Sviluppo.');
+  if (import.meta.env.MODE === 'production') {
+    // Production: usa il worker Cloudflare
+    workerUrl = import.meta.env.VITE_WORKER_URL || 'https://training-log-ai-proxy.giovanni-jecha.workers.dev';
   }
-
-  console.log('[AI Parser] Calling Gemini directly from browser');
   
-  const systemPrompt = AI_SYSTEM_PROMPT;
-  const fullPrompt = `${systemPrompt}\n\n${userPrompt}`;
+  // Prepara headers con chiave custom se fornita (dev mode)
+  const headers = { 'Content-Type': 'application/json' };
+  if (devApiKey && devApiKey.trim().length > 10) {
+    headers['X-Custom-API-Key'] = devApiKey.trim();
+    console.log('[AI Parser] Using custom API key via dev mode');
+  }
   
-  const response = await fetch(`https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash:generateContent?key=${apiKey}`, {
+  const requestBody = buildProxyRequest('gemini', userPrompt);
+  console.log('[AI Parser] Calling worker at:', workerUrl);
+  
+  const response = await fetch(workerUrl, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({
-      contents: [{
-        parts: [{ text: fullPrompt }]
-      }],
-      generationConfig: {
-        temperature: 0.1,
-        maxOutputTokens: 8192
-      }
-    })
+    headers,
+    body: JSON.stringify(requestBody)
   });
 
   if (!response.ok) {
     const error = await response.json().catch(() => ({}));
-    throw new Error(error.error?.message || `API error: ${response.status}`);
+    throw new Error(error.error?.message || `Worker error: ${response.status}`);
   }
 
   const data = await response.json();
   let rawContent = '';
 
-  // Gemini direct API response format
-  if (data.candidates && data.candidates[0]?.content?.parts) {
-    rawContent = data.candidates[0].content.parts[0].text;
+  // Worker ritorna il formato OpenAI-compatible
+  if (data.choices && data.choices[0]?.message?.content) {
+    rawContent = data.choices[0].message.content;
+  } else if (data.error) {
+    throw new Error(data.error.message || 'Worker error');
   } else {
     rawContent = JSON.stringify(data);
   }

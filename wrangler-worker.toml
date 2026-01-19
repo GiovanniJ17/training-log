@@ -1,0 +1,9 @@
+name = "training-log-ai-proxy"
+compatibility_date = "2024-01-01"
+main = "worker.js"
+
+[env.production]
+routes = [
+  { pattern = "training-log-ai-proxy.giovanni-jecha.workers.dev/*", zone_id = "" }
+]
+vars = { VITE_AI_PROVIDER = "gemini" }
