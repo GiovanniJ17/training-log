@@ -42,6 +42,38 @@ CREATE POLICY "Allow all access to injury_history" ON public.injury_history
   USING (true)
   WITH CHECK (true);
 
+-- 6. Abilita RLS su training_sessions
+ALTER TABLE public.training_sessions ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Allow all access to training_sessions" ON public.training_sessions
+  FOR ALL
+  USING (true)
+  WITH CHECK (true);
+
+-- 7. Abilita RLS su workout_groups
+ALTER TABLE public.workout_groups ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Allow all access to workout_groups" ON public.workout_groups
+  FOR ALL
+  USING (true)
+  WITH CHECK (true);
+
+-- 8. Abilita RLS su workout_sets
+ALTER TABLE public.workout_sets ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Allow all access to workout_sets" ON public.workout_sets
+  FOR ALL
+  USING (true)
+  WITH CHECK (true);
+
+-- 9. Abilita RLS su monthly_stats (TABELLA NUOVA)
+ALTER TABLE public.monthly_stats ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Allow all access to monthly_stats" ON public.monthly_stats
+  FOR ALL
+  USING (true)
+  WITH CHECK (true);
+
 -- ============================================
 -- NOTA: Queste policy permettono accesso totale
 -- Sono appropriate per un'app monoutente/personale
