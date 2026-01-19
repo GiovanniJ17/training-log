@@ -21,7 +21,7 @@ function friendlyErrorMessage(message) {
   return message || 'Errore sconosciuto';
 }
 
-export default function AITrainingInput() {
+export default function AITrainingInput({ onDataSaved }) {
   const [trainingText, setTrainingText] = useState('');
   const [loading, setLoading] = useState(false);
   const [parsedData, setParsedData] = useState(null);
@@ -69,6 +69,8 @@ export default function AITrainingInput() {
       
       if (result.success) {
         setSuccess(true);
+        // Segnala al parent di ricaricare i dati del profilo
+        if (onDataSaved) onDataSaved();
         setTimeout(() => {
           setTrainingText('');
           setParsedData(null);
@@ -221,6 +223,27 @@ export default function AITrainingInput() {
                 ))}
               </div>
 
+              {/* Debug: Mostra PB e infortuni estratti */}
+              {(parsedData.personalBests?.length > 0 || parsedData.injuries?.length > 0) && (
+                <div className="border-t border-slate-600 pt-4 mt-4">
+                  <h3 className="text-sm font-semibold text-primary-300 mb-2">📋 Dati Auto-Estratti:</h3>
+                  {parsedData.personalBests?.length > 0 && (
+                    <div className="text-xs text-gray-300 mb-2">
+                      <strong>PB:</strong> {parsedData.personalBests.map(pb => 
+                        pb.type === 'race' ? `${pb.distance_m}m ${pb.time_s}s` : `${pb.exercise_name} ${pb.weight_kg}kg`
+                      ).join(', ')}
+                    </div>
+                  )}
+                  {parsedData.injuries?.length > 0 && (
+                    <div className="text-xs text-gray-300">
+                      <strong>Infortuni:</strong> {parsedData.injuries.map(inj => 
+                        `${inj.injury_type} ${inj.body_part} (${inj.severity})`
+                      ).join(', ')}
+                    </div>
+                  )}
+                </div>
+              )}
+
               {/* Bottoni azione */}
               <div className="flex gap-3">
                 <button
@@ -248,23 +271,44 @@ export default function AITrainingInput() {
                   Modifica
                 </button>
               </div>
+
+              {/* Success message */}
+              {success && (
+                <div className="mt-4 bg-green-900/30 border border-green-600 rounded-lg p-6 text-center">
+                  <CheckCircle2 className="w-12 h-12 text-green-400 mx-auto mb-3" />
+                  <p className="text-green-300 font-semibold">
+                    ✅ Sessione salvata con successo!
+                    {parsedData.personalBests && parsedData.personalBests.length > 0 && (
+                      <span> • {parsedData.personalBests.length} PB aggiunto(i) automaticamente</span>
+                    )}
+                    {parsedData.injuries && parsedData.injuries.length > 0 && (
+                      <span> • {parsedData.injuries.length} infortunio(i) registrato(i)</span>
+                    )}
+                  </p>
+                </div>
+              )}
             </div>
           )}
         </div>
       </div>
+
+      {/* Record Modal rimosso - ora tutto è automatico! */}
 
       {/* Esempi */}
       <div className="mt-8 bg-slate-800/50 rounded-lg p-6">
         <h3 className="text-lg font-semibold text-white mb-3">💡 Esempi di Input</h3>
         <div className="space-y-2 text-sm text-gray-300">
           <div className="bg-slate-700/30 p-3 rounded">
-            <strong className="text-primary-300">Pista:</strong> "Riscaldamento 2km + drill. 8x300m recupero 4min, media 42sec. Defaticamento 1km. RPE 9/10"
+            <strong className="text-primary-300">Con PB:</strong> "100m 10.5sec PB + sprint 60m"
           </div>
           <div className="bg-slate-700/30 p-3 rounded">
-            <strong className="text-primary-300">Palestra:</strong> "Squat 4x6 90kg, stacchi 3x8 100kg, panca 3x10 70kg, plank 3x60sec"
+            <strong className="text-primary-300">Con Massimale:</strong> "Squat 100kg PB, panca 75kg massimale"
           </div>
           <div className="bg-slate-700/30 p-3 rounded">
-            <strong className="text-primary-300">Misto:</strong> "Pista mattina: 6x200m rec 3min. Pomeriggio palestra: gambe, squat 3x8 85kg, affondi 3x10"
+            <strong className="text-primary-300">Con Infortunio:</strong> "Sessione pista ma dolore spalla lieve"
+          </div>
+          <div className="bg-slate-700/30 p-3 rounded">
+            <strong className="text-primary-300">Completo:</strong> "Pista: 100m 10.4sec nuovo record. Infortunio caviglia minore durante riscaldamento. Squat 110kg massimale in palestra"
           </div>
           <div className="bg-slate-700/30 p-3 rounded">
             <strong className="text-primary-300">Settimana intera:</strong> "Lunedì test 150m e 60m... Martedì tecnica 3x120m... Venerdì 3x4x100m + 150m finale" (le date vengono assegnate automaticamente ai giorni indicati)

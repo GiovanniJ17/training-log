@@ -1,11 +1,75 @@
-# Schema SQL per Supabase
-# Esegui questo script nel SQL Editor di Supabase
+-- WARNING: This schema is for context only and is not meant to be run.
+-- Table order and constraints may not be valid for execution.
 
--- Abilita l'estensione per UUID
-CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
-
--- Tabella sessioni di allenamento
-CREATE TABLE IF NOT EXISTS public.training_sessions (
+CREATE TABLE public.athlete_profile (
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),
+  name text NOT NULL,
+  birth_date date NOT NULL,
+  current_weight_kg numeric NOT NULL,
+  height_cm integer,
+  sport_specialization text,
+  profile_picture_url text,
+  bio text,
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT athlete_profile_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.injury_history (
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),
+  injury_type text NOT NULL,
+  body_part text NOT NULL,
+  start_date date NOT NULL,
+  end_date date,
+  severity text NOT NULL CHECK (severity = ANY (ARRAY['minor'::text, 'moderate'::text, 'severe'::text])),
+  cause_session_id uuid,
+  notes text,
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT injury_history_pkey PRIMARY KEY (id),
+  CONSTRAINT injury_history_session_id_fkey FOREIGN KEY (cause_session_id) REFERENCES public.training_sessions(id)
+);
+CREATE TABLE public.race_records (
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),
+  session_id uuid NOT NULL,
+  distance_m integer NOT NULL CHECK (distance_m > 0),
+  time_s numeric NOT NULL CHECK (time_s > 0::numeric),
+  rpe integer CHECK (rpe >= 0 AND rpe <= 10),
+  location text,
+  competition_name text,
+  notes text,
+  is_personal_best boolean DEFAULT false,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT race_records_pkey PRIMARY KEY (id),
+  CONSTRAINT race_records_session_id_fkey FOREIGN KEY (session_id) REFERENCES public.training_sessions(id)
+);
+CREATE TABLE public.strength_records (
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),
+  session_id uuid NOT NULL,
+  exercise_name text NOT NULL,
+  category text NOT NULL CHECK (category = ANY (ARRAY['squat'::text, 'bench'::text, 'deadlift'::text, 'clean'::text, 'jerk'::text, 'press'::text, 'pull'::text, 'other'::text])),
+  weight_kg numeric NOT NULL CHECK (weight_kg > 0::numeric),
+  reps integer NOT NULL DEFAULT 1,
+  notes text,
+  is_personal_best boolean DEFAULT false,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT strength_records_pkey PRIMARY KEY (id),
+  CONSTRAINT strength_records_session_id_fkey FOREIGN KEY (session_id) REFERENCES public.training_sessions(id)
+);
+CREATE TABLE public.training_records (
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),
+  session_id uuid NOT NULL,
+  exercise_name text NOT NULL,
+  exercise_type text NOT NULL CHECK (exercise_type = ANY (ARRAY['sprint'::text, 'jump'::text, 'throw'::text, 'endurance'::text])),
+  performance_value numeric NOT NULL,
+  performance_unit text NOT NULL CHECK (performance_unit = ANY (ARRAY['seconds'::text, 'meters'::text, 'reps'::text, 'kg'::text])),
+  rpe integer CHECK (rpe >= 0 AND rpe <= 10),
+  notes text,
+  is_personal_best boolean DEFAULT false,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT training_records_pkey PRIMARY KEY (id),
+  CONSTRAINT training_records_session_id_fkey FOREIGN KEY (session_id) REFERENCES public.training_sessions(id)
+);
+CREATE TABLE public.training_sessions (
   id uuid NOT NULL DEFAULT uuid_generate_v4(),
   date date NOT NULL DEFAULT CURRENT_DATE,
   title text,
@@ -17,21 +81,16 @@ CREATE TABLE IF NOT EXISTS public.training_sessions (
   created_at timestamp with time zone DEFAULT now(),
   CONSTRAINT training_sessions_pkey PRIMARY KEY (id)
 );
-
--- Tabella gruppi di esercizi
-CREATE TABLE IF NOT EXISTS public.workout_groups (
+CREATE TABLE public.workout_groups (
   id uuid NOT NULL DEFAULT uuid_generate_v4(),
   session_id uuid NOT NULL,
   order_index integer DEFAULT 0,
   name text,
   notes text,
   CONSTRAINT workout_groups_pkey PRIMARY KEY (id),
-  CONSTRAINT workout_groups_session_id_fkey FOREIGN KEY (session_id) 
-    REFERENCES public.training_sessions(id) ON DELETE CASCADE
+  CONSTRAINT workout_groups_session_id_fkey FOREIGN KEY (session_id) REFERENCES public.training_sessions(id)
 );
-
--- Tabella set di esercizi
-CREATE TABLE IF NOT EXISTS public.workout_sets (
+CREATE TABLE public.workout_sets (
   id uuid NOT NULL DEFAULT uuid_generate_v4(),
   group_id uuid NOT NULL,
   exercise_name text NOT NULL,
@@ -46,31 +105,5 @@ CREATE TABLE IF NOT EXISTS public.workout_sets (
   notes text,
   created_at timestamp with time zone DEFAULT now(),
   CONSTRAINT workout_sets_pkey PRIMARY KEY (id),
-  CONSTRAINT workout_sets_group_id_fkey FOREIGN KEY (group_id) 
-    REFERENCES public.workout_groups(id) ON DELETE CASCADE
+  CONSTRAINT workout_sets_group_id_fkey FOREIGN KEY (group_id) REFERENCES public.workout_groups(id)
 );
-
--- Indici per migliorare le performance
-CREATE INDEX IF NOT EXISTS idx_training_sessions_date ON public.training_sessions(date DESC);
-CREATE INDEX IF NOT EXISTS idx_workout_groups_session_id ON public.workout_groups(session_id);
-CREATE INDEX IF NOT EXISTS idx_workout_sets_group_id ON public.workout_sets(group_id);
-
--- Abilita Row Level Security (RLS)
-ALTER TABLE public.training_sessions ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.workout_groups ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.workout_sets ENABLE ROW LEVEL SECURITY;
-
--- Policy per permettere tutto (da modificare con autenticazione in futuro)
-CREATE POLICY "Allow all operations on training_sessions" ON public.training_sessions
-  FOR ALL USING (true) WITH CHECK (true);
-
-CREATE POLICY "Allow all operations on workout_groups" ON public.workout_groups
-  FOR ALL USING (true) WITH CHECK (true);
-
-CREATE POLICY "Allow all operations on workout_sets" ON public.workout_sets
-  FOR ALL USING (true) WITH CHECK (true);
-
--- Grant permissions
-GRANT ALL ON public.training_sessions TO anon, authenticated;
-GRANT ALL ON public.workout_groups TO anon, authenticated;
-GRANT ALL ON public.workout_sets TO anon, authenticated;

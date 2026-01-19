@@ -1,0 +1,15 @@
+id,session_id,order_index,name,notes
+082fe992-6932-4e82-ba87-2ea7f2377fc5,72961e31-82e7-495c-a7e3-e9cf468ac1dc,1,Lavoro Principale,
+2397f8ed-bb1f-45da-8c62-9e013c4b8de0,72961e31-82e7-495c-a7e3-e9cf468ac1dc,2,Defaticamento,
+35c1b705-5381-4772-8b0f-c23d9717733e,d0ca63cd-0374-4cfe-af94-f4c288e478ac,1,Lavoro Principale,
+4f556633-0d77-4ad5-a4a5-a4ede87ceef9,831c69d3-fba7-4ac2-b7ff-24c77ad41cd6,0,Gara,
+4ff7a870-d1ea-45ff-b8ed-8157f4828291,40ddb4ae-ca2e-4a57-a6c7-d45a50632096,1,Recupero,Recupero completo tra i blocchi di lavoro.
+6776b3cf-6c3b-42ed-854d-838c5377b3a8,d0ca63cd-0374-4cfe-af94-f4c288e478ac,0,Riscaldamento,
+a56b08d9-7e9a-4920-92f8-66e928541b58,fe3524e7-fa4d-4afe-8b1a-e5424a2913f5,0,Recupero Attivo,
+bee8c2b2-be67-4586-8257-2cb960b8b5ea,40ddb4ae-ca2e-4a57-a6c7-d45a50632096,0,Lavoro Lattacido,
+c2a25b5a-7e94-4706-9f22-b876e17babea,40ddb4ae-ca2e-4a57-a6c7-d45a50632096,2,Balzi,
+df9e4dbb-077c-4f53-bfc6-c6da4e2fcd60,f6aae30c-a8b6-4741-b473-28026175646d,0,Lavoro Principale,Esercizi per la parte superiore del corpo e core.
+e4b66b5e-15a0-4fdb-a194-0b60b44c0628,fe3524e7-fa4d-4afe-8b1a-e5424a2913f5,1,Stretching,
+ecdd54c6-d267-4b65-a2c0-3fadea877100,72961e31-82e7-495c-a7e3-e9cf468ac1dc,0,Riscaldamento,
+ef856ba2-f123-49c0-b237-3ba19708fc69,7db925e1-dc6c-471b-a099-fe338b642a7c,0,Sessione,Sessione auto-creata
+fbfb735a-a2ab-4a79-99f2-47ec7ac2be91,336e93c0-dae1-474a-b72f-dd9f9be2218f,0,Lavoro Principale,

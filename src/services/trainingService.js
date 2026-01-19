@@ -1,6 +1,12 @@
 import { supabase } from '../lib/supabase';
 import { format } from 'date-fns';
 import { standardizeTrainingSession } from '../utils/standardizer.js';
+import {
+  addRaceRecord,
+  addTrainingRecord,
+  addStrengthRecord,
+  addInjury,
+} from './athleteService.js';
 
 /**
  * Saves a complete training session to database with cascade insert
@@ -67,7 +73,75 @@ async function insertTrainingSession(parsedData) {
     }
   }
 
-  return { success: true, sessionId: session.id };
+  return { success: true, sessionId: session.id, sessionDate: standardizedData.session.date };
+}
+
+/**
+ * Salva automaticamente i PB e infortuni estratti dal parsing
+ */
+async function saveExtractedRecords(sessionId, sessionDate, personalBests = [], injuries = []) {
+  try {
+    // Salva i PB con validazione
+    for (const pb of personalBests) {
+      if (pb.type === 'race') {
+        // Valida se è davvero un PB controllando i record esistenti
+        const { data: existingRecords } = await supabase
+          .from('race_records')
+          .select('time_s')
+          .eq('distance_m', pb.distance_m)
+          .order('time_s', { ascending: true })
+          .limit(1);
+
+        const isTruePB = !existingRecords || existingRecords.length === 0 || pb.time_s < existingRecords[0].time_s;
+
+        await addRaceRecord(sessionId, {
+          distance_m: pb.distance_m,
+          time_s: pb.time_s,
+          is_personal_best: isTruePB,
+        });
+      } else if (pb.type === 'strength') {
+        // Valida se è davvero un PB massimale controllando i record esistenti
+        const { data: existingRecords } = await supabase
+          .from('strength_records')
+          .select('weight_kg')
+          .eq('category', pb.category)
+          .order('weight_kg', { ascending: false })
+          .limit(1);
+
+        const isTruePB = !existingRecords || existingRecords.length === 0 || pb.weight_kg > existingRecords[0].weight_kg;
+
+        await addStrengthRecord(sessionId, {
+          exercise_name: pb.exercise_name,
+          category: pb.category,
+          weight_kg: pb.weight_kg,
+          reps: pb.reps || 1,
+          is_personal_best: isTruePB,
+        });
+      }
+    }
+
+    // Salva gli infortuni
+    for (const injury of injuries) {
+      try {
+        await addInjury({
+          injury_type: injury.injury_type,
+          body_part: injury.body_part,
+          start_date: sessionDate || new Date().toISOString().split('T')[0],
+          severity: injury.severity,
+          cause_session_id: sessionId,
+        });
+      } catch (injuryError) {
+        console.warn(`Errore nel salvataggio infortunio (${injury.body_part}):`, injuryError);
+        // Continua comunque con gli altri infortuni
+      }
+    }
+
+    return { success: true };
+  } catch (error) {
+    console.warn('Errore nel salvataggio record estratti:', error);
+    // Non fallire il salvataggio della sessione se fallisce il salvataggio dei record
+    return { success: false, error: error.message };
+  }
 }
 
 /**
@@ -84,11 +158,15 @@ export async function saveTrainingSession(parsedData) {
 
 /**
  * Salva più sessioni in sequenza (per input multi-giorno)
+ * Estrae e salva anche automaticamente PB e infortuni
  */
 export async function saveTrainingSessions(parsedPayload) {
   const sessions = Array.isArray(parsedPayload.sessions)
     ? parsedPayload.sessions
     : [parsedPayload];
+
+  const personalBests = parsedPayload.personalBests || [];
+  const injuries = parsedPayload.injuries || [];
 
   const savedIds = [];
 
@@ -99,6 +177,11 @@ export async function saveTrainingSessions(parsedPayload) {
         return { success: false, error: `Sessione ${idx + 1}: ${result.error}`, savedIds };
       }
       savedIds.push(result.sessionId);
+
+      // Salva i PB e infortuni per questa sessione
+      if (personalBests.length > 0 || injuries.length > 0) {
+        await saveExtractedRecords(result.sessionId, result.sessionDate, personalBests, injuries);
+      }
     } catch (error) {
       console.error('Errore nel salvataggio multi-sessione:', error);
       return { success: false, error: `Sessione ${idx + 1}: ${error.message}`, savedIds };
@@ -196,41 +279,90 @@ export async function deleteTrainingSession(sessionId) {
 }
 
 /**
- * Statistiche semplici
+ * Statistiche avanzate con algoritmi
  */
 export async function getTrainingStats(startDate, endDate) {
   try {
-    let query = supabase
+    // Recupera sessioni nel periodo
+    let sessionQuery = supabase
       .from('training_sessions')
-      .select('*');
+      .select('*')
+      .order('date', { ascending: true });
 
     if (startDate) {
-      query = query.gte('date', startDate);
+      sessionQuery = sessionQuery.gte('date', startDate);
     }
     if (endDate) {
-      query = query.lte('date', endDate);
+      sessionQuery = sessionQuery.lte('date', endDate);
     }
 
-    const { data: sessions, error } = await query;
+    const { data: sessions, error } = await sessionQuery;
     if (error) throw error;
 
-    // Calcola statistiche
-    const totalSessions = sessions.length;
-    const avgRPE = sessions
-      .filter(s => s.rpe !== null)
-      .reduce((sum, s) => sum + s.rpe, 0) / sessions.filter(s => s.rpe !== null).length || 0;
+    // Ottieni gli ID delle sessioni nel periodo
+    const sessionIds = sessions.map(s => s.id);
 
+    // Recupera i gruppi per queste sessioni
+    const { data: groups, error: groupsError } = await supabase
+      .from('workout_groups')
+      .select('id, session_id')
+      .in('session_id', sessionIds);
+    
+    if (groupsError) throw groupsError;
+
+    const groupIds = groups.map(g => g.id);
+
+    // Recupera i sets per questi gruppi
+    const { data: sets, error: setsError } = await supabase
+      .from('workout_sets')
+      .select('*')
+      .in('group_id', groupIds);
+    
+    if (setsError) throw setsError;
+
+    // Calcola statistiche base
+    const totalSessions = sessions.length;
+    
+    // RPE medio (solo sessioni con RPE)
+    const sessionsWithRPE = sessions.filter(s => s.rpe !== null && s.rpe !== undefined);
+    const avgRPE = sessionsWithRPE.length > 0
+      ? (sessionsWithRPE.reduce((sum, s) => sum + s.rpe, 0) / sessionsWithRPE.length)
+      : null;
+
+    // Distribuzione tipi
     const typeDistribution = sessions.reduce((acc, s) => {
       acc[s.type] = (acc[s.type] || 0) + 1;
       return acc;
     }, {});
 
+    // Volume totale distanza (somma distance_m * sets)
+    const totalDistance = sets
+      .filter(s => s.distance_m)
+      .reduce((sum, s) => sum + (s.distance_m * (s.sets || 1)), 0);
+    
+    // Volume totale peso (somma weight_kg * reps * sets)
+    const totalWeight = sets
+      .filter(s => s.weight_kg && s.reps)
+      .reduce((sum, s) => sum + (s.weight_kg * s.reps * (s.sets || 1)), 0);
+
+    // Calcola streak (giorni consecutivi) - usa TUTTE le sessioni non solo quelle filtrate
+    const { data: allSessions, error: allError } = await supabase
+      .from('training_sessions')
+      .select('date')
+      .order('date', { ascending: false });
+    
+    if (allError) throw allError;
+    const streak = calculateStreak(allSessions);
+
     return {
       success: true,
       data: {
         totalSessions,
-        avgRPE: avgRPE.toFixed(1),
+        avgRPE: avgRPE !== null ? avgRPE.toFixed(1) : null,
         typeDistribution,
+        totalDistanceKm: (totalDistance / 1000).toFixed(2),
+        totalWeightKg: totalWeight.toFixed(0),
+        currentStreak: streak,
         sessions,
       },
     };
@@ -238,6 +370,48 @@ export async function getTrainingStats(startDate, endDate) {
     console.error('Errore nel recupero statistiche:', error);
     return { success: false, error: error.message };
   }
+}
+
+/**
+ * Calcola streak di allenamenti consecutivi
+ */
+function calculateStreak(sessions) {
+  if (sessions.length === 0) return 0;
+  
+  // Ottieni le date uniche (possono esserci più sessioni nello stesso giorno)
+  const uniqueDates = [...new Set(sessions.map(s => s.date))].sort((a, b) => 
+    new Date(b).getTime() - new Date(a).getTime()
+  );
+  
+  if (uniqueDates.length === 0) return 0;
+  
+  // Trova la data più recente nel database
+  const mostRecentDate = new Date(uniqueDates[0]);
+  mostRecentDate.setHours(0, 0, 0, 0);
+  
+  let streak = 1; // Conta la prima data
+  let currentDate = new Date(mostRecentDate);
+  
+  // Conta all'indietro le date consecutive
+  for (let i = 1; i < uniqueDates.length; i++) {
+    const prevDate = new Date(uniqueDates[i]);
+    prevDate.setHours(0, 0, 0, 0);
+    
+    // Calcola la data attesa (giorno precedente)
+    const expectedDate = new Date(currentDate);
+    expectedDate.setDate(expectedDate.getDate() - 1);
+    
+    // Verifica se è consecutiva
+    if (prevDate.getTime() === expectedDate.getTime()) {
+      streak++;
+      currentDate = new Date(prevDate);
+    } else {
+      // Interrompi se non consecutiva
+      break;
+    }
+  }
+  
+  return streak;
 }
 
 /**

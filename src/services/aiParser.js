@@ -461,33 +461,100 @@ Return ONLY valid JSON. Do not include markdown or explanations.`;
 /**
  * Interpreta testo di allenamento. Supporta più giorni nello stesso input.
  * - Se trova intestazioni con giorni (lunedì/martedì...), crea una sessione per ciascuna.
- * - Se non trova giorni, considera una sola sessione datata oggi.
+ * - Se non trova giorni, cerca una data esplicita nel testo.
+ * - Se non trova neanche una data, usa la data di riferimento (oggi).
  */
+function inferRpeFromText(text) {
+  if (!text) return null;
+  const lower = text.toLowerCase();
+
+  const numeric = lower.match(/(\d{1,2})\s*(?:\/10|su\s*10)/);
+  if (numeric) {
+    const val = parseInt(numeric[1], 10);
+    if (val >= 1 && val <= 10) return val;
+  }
+
+  if (lower.includes('massimo')) return 9;
+  if (lower.includes('alta') || lower.includes('intenso')) return 8;
+  if (lower.includes('media')) return 6;
+  if (lower.includes('bassa') || lower.includes('easy')) return 4;
+  if (lower.includes('scarico') || lower.includes('recupero')) return 3;
+
+  return null;
+}
+
 export async function parseTrainingWithAI(trainingText, referenceDate = new Date()) {
-  const trimmed = trainingText?.trim();
+  let trimmed = trainingText?.trim();
   if (!trimmed) throw new Error('Testo allenamento vuoto');
   
-  const chunks = findDayChunks(trimmed, referenceDate);
+  // Cerca pattern "inizio settimana DD/MM/YYYY" o "settimana del DD/MM/YYYY"
+  let weekReference = referenceDate;
+  const weekPatterns = [
+    /(?:inizio\s+settimana|settimana\s+del|settimana)\s*:?\s*(\d{1,2}[\/\-]\d{1,2}(?:[\/\-]\d{2,4})?)/i,
+    /^(\d{1,2}[\/\-]\d{1,2}(?:[\/\-]\d{2,4})?)\s*[-:]\s*settimana/i
+  ];
+  
+  for (const pattern of weekPatterns) {
+    const match = trimmed.match(pattern);
+    if (match) {
+      const parsed = parseExplicitDate(match[1], referenceDate);
+      if (parsed) {
+        weekReference = new Date(parsed);
+        // Rimuovi questa frase introduttiva dal testo
+        trimmed = trimmed.replace(match[0], '').trim();
+        break;
+      }
+    }
+  }
+  
+  const chunks = findDayChunks(trimmed, weekReference);
 
   // Caso multi-giorno
   if (chunks.length > 0) {
     const sessions = [];
     for (const chunk of chunks) {
-      const targetDate = chunk.explicitDate || dateForWeekday(chunk.weekday, referenceDate);
+      const targetDate = chunk.explicitDate || dateForWeekday(chunk.weekday, weekReference);
       const parsed = await parseSingleDay({
         text: chunk.text,
         date: targetDate,
         titleHint: chunk.heading
       });
+      // Se manca rpe, prova a inferirlo dal testo del chunk
+      if (!parsed.session.rpe) {
+        const inferred = inferRpeFromText(chunk.text);
+        if (inferred) parsed.session.rpe = inferred;
+      }
       sessions.push(parsed);
     }
-    return { sessions };
+
+    const personalBests = extractPersonalBests(trimmed);
+    const injuries = extractInjuries(trimmed);
+    return { sessions, personalBests, injuries };
   }
 
-  // Caso singolo giorno → data = oggi/reference
-  const singleDate = formatLocalDate(new Date(referenceDate));
-  const parsed = await parseSingleDay({ text: trimmed, date: singleDate, titleHint: null });
-  return { sessions: [parsed] };
+  // Caso singolo giorno: cerca data esplicita nel testo
+  let singleDate = formatLocalDate(new Date(weekReference));
+  let singleText = trimmed;
+  
+  // Estrai data esplicita se presente
+  const dateMatch = trimmed.match(/^(\d{1,2}[\/\-]\d{1,2}(?:[\/\-]\d{2,4})?)/);
+  if (dateMatch) {
+    const extracted = parseExplicitDate(dateMatch[1], weekReference);
+    if (extracted) {
+      singleDate = extracted;
+      singleText = trimmed.slice(dateMatch[1].length).trim();
+    }
+  }
+  
+  const parsed = await parseSingleDay({ text: singleText, date: singleDate, titleHint: null });
+  if (!parsed.session.rpe) {
+    const inferred = inferRpeFromText(singleText);
+    if (inferred) parsed.session.rpe = inferred;
+  }
+
+  const personalBests = extractPersonalBests(trimmed);
+  const injuries = extractInjuries(trimmed);
+  return { sessions: [parsed], personalBests, injuries };
 }
 
 function validateSingleSession(data) {
@@ -622,4 +689,106 @@ export function validateParsedData(data) {
     valid: errors.length === 0,
     errors
   };
+}
+
+// =====================
+// Estrazione PB e infortuni dal testo grezzo
+// =====================
+
+export function extractPersonalBests(text) {
+  const pbs = [];
+
+  // PB gara esplicito: "100m 10.5sec PB"
+  const racePattern = /(\d+)\s*m(?:etri?)?\s+(?:in\s+)?(\d+[.,]\d+|\d+)\s*(?:sec|s)?\s+(?:PB|personal\s+best|nuovo\s+record|miglior\s+tempo)/gi;
+  let match;
+  while ((match = racePattern.exec(text)) !== null) {
+    pbs.push({ type: 'race', distance_m: parseInt(match[1]), time_s: parseFloat(match[2].replace(',', '.')), is_personal_best: true });
+  }
+
+  // PB gara implicito in contesto gara/pista: "gara 60m 7.18" oppure "gara 100 10.40"
+  if (text.match(/\bgara\b|\bpista\b|\bcompetizione\b|\bgare\b/i)) {
+    const implicitRacePattern = /(?:gara|pista|competizione)\s*:?\s*(\d+)\s*m?(?:etri)?\s+(?:in\s+)?(\d+[.,]\d+|\d+)\s*(?:sec|s)?(?!\s+(?:x|serie|set|\d+x))/gi;
+    while ((match = implicitRacePattern.exec(text)) !== null) {
+      const distance = parseInt(match[1]);
+      const time = parseFloat(match[2].replace(',', '.'));
+      const isDuplicate = pbs.some(pb => pb.type === 'race' && pb.distance_m === distance && Math.abs(pb.time_s - time) < 0.1);
+      if (!isDuplicate) {
+        pbs.push({ type: 'race', distance_m: distance, time_s: time, is_personal_best: true, implicit: true });
+      }
+    }
+  }
+
+  // PB gara implicito GENERICO (es. "test 150m 19.8" o "60m 7.20" anche senza parola gara)
+  if (text.match(/\btest\b|\bsforzo\b|\bmassimo\b|\btempo\b|\bcronometro\b/i)) {
+    // Consente poche parole tra distanza e tempo (es. "300m ripetuta singola in 36.5") ma blocca pattern di ripetizioni (x, serie, volte)
+    // Richiede o "in <tempo>" oppure un'unità (sec/s/"), per non scambiare RPE o conteggi per tempi
+    const genericRacePattern = /(?:^|\b)(?!\d+\s*x)(\d+)\s*m(?:etri)?\b(?:\s+(?!\d+\s*(?:x|volte|rip|rep|serie|set))(?!per\s+\d)(?!x\s+\d)(?:[a-zà-ù']+)){0,4}\s*(?:in\s+(\d+[.,]\d+|\d+)|(\d+[.,]\d+|\d+)(?:['"”″]|\s*(?:sec|s)\b))(?!\s+(?:x|serie|set|\d+x|volte|volta|ripetute|rip|rep))/gi;
+    while ((match = genericRacePattern.exec(text)) !== null) {
+      const rawSegment = match[0];
+      if (/rec(?:upero)?/i.test(rawSegment)) continue; // evita di leggere i recuperi come tempi PB
+
+      const distance = parseInt(match[1]);
+      const timeStr = match[2] || match[3];
+      const time = parseFloat(timeStr.replace(',', '.'));
+      // Evita duplicati e tempi irreali
+      if (time <= 0 || time > 600) continue; // taglia tempi fuori scala
+      const minPlausible = distance / 12; // es: 100m -> ~8.3s minimo plausibile
+      if (time < minPlausible) continue; // scarta conteggi o RPE (es. "60m ... intensità 8")
+      const isDuplicate = pbs.some(pb => pb.type === 'race' && pb.distance_m === distance && Math.abs(pb.time_s - time) < 0.1);
+      if (!isDuplicate) {
+        pbs.push({ type: 'race', distance_m: distance, time_s: time, is_personal_best: true, implicit: true, generic: true });
+      }
+    }
+  }
+
+  // PB forza esplicito: "Squat 100kg PB"
+  const strengthPattern = /(squat|bench|deadlift|stacco|clean|jerk|press|military\s+press|panca|trazioni?)\s+(\d+[.,]\d+|\d+)\s*kg\s+(?:PB|personal\s+best|massimale|nuovo\s+massimale)/gi;
+  while ((match = strengthPattern.exec(text)) !== null) {
+    const exerciseName = match[1];
+    const categoryMap = {
+      'squat': 'squat', 'bench': 'bench', 'panca': 'bench', 'deadlift': 'deadlift', 'stacco': 'deadlift',
+      'clean': 'clean', 'jerk': 'jerk', 'press': 'press', 'military press': 'press', 'military': 'press',
+      'trazioni': 'pull', 'trazione': 'pull'
+    };
+    const category = categoryMap[exerciseName.toLowerCase()] || 'other';
+    pbs.push({ type: 'strength', exercise_name: exerciseName, category, weight_kg: parseFloat(match[2].replace(',', '.')), reps: 1, is_personal_best: true });
+  }
+
+  // PB forza implicito: "palestra squat 150kg" (senza PB)
+  if (text.match(/\bpalestra\b|\bforza\b|\bmassimali\b/i)) {
+    const implicitStrengthPattern = /(?:palestra|forza)\s*:?\s*(squat|bench|deadlift|stacco|clean|jerk|press|military\s+press|panca|trazioni?)\s+(\d+[.,]\d+|\d+)\s*kg(?!\s+(?:x|reps|set))/gi;
+    while ((match = implicitStrengthPattern.exec(text)) !== null) {
+      const exerciseName = match[1];
+      const weight = parseFloat(match[2].replace(',', '.'));
+      const categoryMap = {
+        'squat': 'squat', 'bench': 'bench', 'panca': 'bench', 'deadlift': 'deadlift', 'stacco': 'deadlift',
+        'clean': 'clean', 'jerk': 'jerk', 'press': 'press', 'military press': 'press', 'military': 'press',
+        'trazioni': 'pull', 'trazione': 'pull'
+      };
+      const category = categoryMap[exerciseName.toLowerCase()] || 'other';
+      const isDuplicate = pbs.some(pb => pb.type === 'strength' && pb.category === category && Math.abs(pb.weight_kg - weight) < 0.5);
+      if (!isDuplicate) {
+        pbs.push({ type: 'strength', exercise_name: exerciseName, category, weight_kg: weight, reps: 1, is_personal_best: true, implicit: true });
+      }
+    }
+  }
+
+  return pbs;
+}
+
+export function extractInjuries(text) {
+  const injuries = [];
+  const pattern = /(infortunio|lesione|strappo|contrattura|dolore|fastidio)\s+(?:al|alla|allo|ai|alle|dietro\s+al)?\s*([a-zàèéìòù\s]+)/gi;
+  let match;
+  while ((match = pattern.exec(text)) !== null) {
+    const type = match[1];
+    const bodyPart = match[2].trim();
+    injuries.push({
+      injury_type: type,
+      body_part: bodyPart,
+      start_date: formatLocalDate(new Date()),
+      severity: 'moderate'
+    });
+  }
+  return injuries;
 }

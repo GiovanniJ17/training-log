@@ -1,0 +1,3 @@
+id,injury_type,body_part,start_date,end_date,severity,cause_session_id,notes,created_at,updated_at
+bc735a37-3f3c-4efe-9219-92911056529a,dolore,spalla,2026-01-17,2026-01-19,moderate,,,2026-01-19 13:27:38.153093+00,2026-01-19 13:34:16.537+00
+cc37ddfa-2953-46b0-9a90-c65a6aecc986,dolore,ginocchio,2026-01-18,2026-01-19,moderate,831c69d3-fba7-4ac2-b7ff-24c77ad41cd6,,2026-01-19 13:24:19.066223+00,2026-01-19 13:34:06.617+00
