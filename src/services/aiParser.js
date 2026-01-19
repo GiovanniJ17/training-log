@@ -903,7 +903,32 @@ export function derivePBsFromSessions(sessions) {
 export function mergePersonalBests(textPBs, derivedPBs) {
   const merged = [...(textPBs || [])];
   (derivedPBs || []).forEach(pb => {
-    const duplicate = merged.some(m => m.type === pb.type && m.distance_m === pb.distance_m && Math.abs(m.time_s - pb.time_s) < 0.05);
+    let duplicate = false;
+    
+    if (pb.type === 'race') {
+      // Race PB: confronta distance_m e time_s
+      duplicate = merged.some(m => 
+        m.type === 'race' && 
+        m.distance_m === pb.distance_m && 
+        Math.abs(m.time_s - pb.time_s) < 0.05
+      );
+    } else if (pb.type === 'training') {
+      // Training PB: confronta exercise_name e performance_value
+      duplicate = merged.some(m => 
+        m.type === 'training' && 
+        m.exercise_name === pb.exercise_name && 
+        m.performance_unit === pb.performance_unit &&
+        Math.abs(m.performance_value - pb.performance_value) < 0.05
+      );
+    } else if (pb.type === 'strength') {
+      // Strength PB: confronta category e weight_kg
+      duplicate = merged.some(m => 
+        m.type === 'strength' && 
+        m.category === pb.category && 
+        Math.abs(m.weight_kg - pb.weight_kg) < 0.5
+      );
+    }
+    
     if (!duplicate) merged.push(pb);
   });
   return merged;

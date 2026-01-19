@@ -9,8 +9,9 @@ import {
 } from './athleteService.js';
 
 /**
- * Saves a complete training session to database with cascade insert
+ * Saves a complete training session to database using atomic RPC transaction
  * Applies data standardization (exercise names, times, recovery durations) before saving
+ * Uses Postgres stored procedure for ACID compliance - all or nothing insert
  * @param {Object} parsedData - Parsed training session object with session, groups, and sets
  * @returns {Promise<Object>} Saved session data with ID
  * @throws {Error} If database operation fails
@@ -18,62 +19,31 @@ import {
 async function insertTrainingSession(parsedData) {
   const standardizedData = standardizeTrainingSession(parsedData);
 
-  // 1. Inserisci la sessione principale
-  const { data: session, error: sessionError } = await supabase
-    .from('training_sessions')
-    .insert([{
-      date: standardizedData.session.date,
-      title: standardizedData.session.title,
-      type: standardizedData.session.type,
-      location: standardizedData.session.location || null,
-      rpe: standardizedData.session.rpe || null,
-      feeling: standardizedData.session.feeling || null,
-      notes: standardizedData.session.notes || null,
-    }])
-    .select()
-    .single();
-  if (sessionError) throw sessionError;
+  // Prepara i gruppi in formato JSON per la stored procedure
+  const groupsJson = standardizedData.groups.map(group => ({
+    order_index: group.order_index,
+    name: group.name,
+    notes: group.notes,
+    sets: group.sets // Array già standardizzato
+  }));
 
-  // 2. Inserisci i gruppi di esercizi
-  for (const [index, group] of standardizedData.groups.entries()) {
-    const { data: workoutGroup, error: groupError } = await supabase
-      .from('workout_groups')
-      .insert([{
-        session_id: session.id,
-        order_index: group.order_index ?? index,
-        name: group.name,
-        notes: group.notes || null,
-      }])
-      .select()
-      .single();
+  // Chiamata RPC atomica: O tutto o niente! 🛡️
+  // 1 sola chiamata di rete invece di N (sessione + gruppi + set)
+  // Se la connessione cade, il database fa rollback automatico
+  const { data: sessionId, error } = await supabase.rpc('insert_full_training_session', {
+    p_date: standardizedData.session.date,
+    p_title: standardizedData.session.title,
+    p_type: standardizedData.session.type,
+    p_location: standardizedData.session.location || null,
+    p_rpe: standardizedData.session.rpe || null,
+    p_feeling: standardizedData.session.feeling || null,
+    p_notes: standardizedData.session.notes || null,
+    p_groups: groupsJson
+  });
 
-    if (groupError) throw groupError;
+  if (error) throw error;
 
-    // 3. Inserisci i set di esercizi per questo gruppo
-    if (group.sets && group.sets.length > 0) {
-      const setsToInsert = group.sets.map(set => ({
-        group_id: workoutGroup.id,
-        exercise_name: set.exercise_name,
-        category: set.category || null,
-        sets: set.sets || 1,
-        reps: set.reps || 1,
-        weight_kg: set.weight_kg || null,
-        distance_m: set.distance_m || null,
-        time_s: set.time_s || null,
-        recovery_s: set.recovery_s || null,
-        details: set.details || {},
-        notes: set.notes || null,
-      }));
-
-      const { error: setsError } = await supabase
-        .from('workout_sets')
-        .insert(setsToInsert);
-
-      if (setsError) throw setsError;
-    }
-  }
-
-  return { success: true, sessionId: session.id, sessionDate: standardizedData.session.date };
+  return { success: true, sessionId: sessionId, sessionDate: standardizedData.session.date };
 }
 
 /**
