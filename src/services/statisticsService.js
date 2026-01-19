@@ -53,7 +53,10 @@ export async function getStatsData(startDate = null, endDate = null) {
     const strengthRecords = [];
     const trainingRecords = [];
 
-    const isWarmup = (name = '') => /riscald|warm\s?-?up/i.test(name);
+    const isWarmup = (name) => {
+      if (typeof name !== 'string') return false;
+      return /riscald|warm\s?-?up|attivazione|drills/i.test(name);
+    };
 
     sessions.forEach(session => {
       const groups = session.workout_groups || [];
@@ -70,6 +73,7 @@ export async function getStatsData(startDate = null, endDate = null) {
             session.type === 'test'
           );
           const highIntensity = typeof set?.details?.intensity === 'number' ? set.details.intensity >= 7 : false;
+          const normalizedExercise = typeof set.exercise_name === 'string' ? set.exercise_name.trim().toLowerCase() : '';
 
           // Record corsa: includi solo set cronometrati non marcati come riscaldamento
           if (set.distance_m > 0 && set.time_s > 0 && !warmup) {
@@ -96,6 +100,7 @@ export async function getStatsData(startDate = null, endDate = null) {
               date: session.date,
               created_at: session.date,
               exercise_name: set.exercise_name,
+              normalized_exercise_name: normalizedExercise || null,
               weight_kg: set.weight_kg,
               reps: set.reps,
               sets: set.sets,
@@ -137,6 +142,8 @@ export function calculateKPIs(sessions, raceRecords, strengthRecords, trainingRe
   const stats = {
     totalSessions: sessions.length,
     totalVolume: 0,
+    totalDistanceM: 0,
+    totalTonnageKg: 0,
     avgRPE: 0,
     sessionsByType: {},
     pbCount: (raceRecords.filter(r => r.is_personal_best).length) + (trainingRecords.filter(t => t.is_personal_best).length),
@@ -155,9 +162,27 @@ export function calculateKPIs(sessions, raceRecords, strengthRecords, trainingRe
       totalRPE += session.rpe;
       rpeCount++;
     }
+
+    // Volume: somma distanza e tonnellaggio dai set annidati
+    (session.workout_groups || []).forEach(group => {
+      (group.workout_sets || []).forEach(set => {
+        const setCount = set.sets || 1;
+        const reps = set.reps || 1;
+        if (set.distance_m) {
+          stats.totalDistanceM += Number(set.distance_m || 0) * setCount;
+        }
+        if (set.weight_kg) {
+          stats.totalTonnageKg += Number(set.weight_kg || 0) * setCount * reps;
+        }
+      });
+    });
   });
 
   stats.avgRPE = rpeCount > 0 ? (totalRPE / rpeCount).toFixed(1) : 0;
+  stats.volume = {
+    distance_m: Math.round(stats.totalDistanceM),
+    tonnage_kg: Math.round(stats.totalTonnageKg),
+  };
 
   return stats;
 }

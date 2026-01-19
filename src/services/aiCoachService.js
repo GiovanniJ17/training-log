@@ -112,11 +112,11 @@ export async function getWeeklyInsight({ sessions = [], raceRecords = [], streng
 
   const sortedSessions = sessions
     .slice()
-    .sort((a, b) => new Date(b.date) - new Date(a.date))
-    .slice(0, 12)
+    .sort((a, b) => new Date(a.date) - new Date(b.date))
+    .slice(-12)
     .map(s => ({ date: s.date, type: s.type, rpe: s.rpe, title: s.title }));
 
-  const volume = summarizeVolume(sessions);
+  const volume = kpis?.volume || summarizeVolume(sessions);
   const pbs = recentPbs(raceRecords);
   const bestTimes = bestTimesByDistance(raceRecords, 4);
   const strengthPeaks = strengthRecords
@@ -157,6 +157,8 @@ export async function getWhatIfPrediction({ distance_m, target_weight, exercise_
     return { success: false, error: 'Compila distanza, esercizio e peso target.' };
   }
 
+  const target = (exercise_name || '').toLowerCase();
+
   const races = raceRecords
     .filter(r => r.distance_m === Number(distance_m))
     .sort((a, b) => new Date(a.date || a.created_at) - new Date(b.date || b.created_at))
@@ -164,7 +166,11 @@ export async function getWhatIfPrediction({ distance_m, target_weight, exercise_
     .map(r => ({ date: r.date || r.created_at, time_s: Number(r.time_s), pb: !!r.is_personal_best }));
 
   const lifts = strengthRecords
-    .filter(s => s.exercise_name === exercise_name)
+    .filter(s => {
+      const norm = (s.normalized_exercise_name || '').toLowerCase();
+      const raw = (s.exercise_name || '').toLowerCase();
+      return norm.includes(target) || raw.includes(target);
+    })
     .sort((a, b) => new Date(a.date || a.created_at) - new Date(b.date || b.created_at))
     .slice(-30)
     .map(s => ({ date: s.date || s.created_at, weight_kg: Number(s.weight_kg), reps: s.reps, sets: s.sets }));

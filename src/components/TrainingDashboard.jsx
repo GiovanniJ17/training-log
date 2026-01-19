@@ -128,9 +128,15 @@ export default function TrainingDashboard() {
     return Array.from(keys).sort((a, b) => a - b);
   }, [progressionData]);
 
-  const strengthExercises = useMemo(() => {
-    const keys = new Set(rawData.strengthRecords.map((s) => s.exercise_name).filter(Boolean));
-    return Array.from(keys).sort((a, b) => a.localeCompare(b));
+  const strengthExerciseOptions = useMemo(() => {
+    const counts = rawData.strengthRecords.reduce((acc, s) => {
+      const name = s.exercise_name || 'Senza nome';
+      acc[name] = (acc[name] || 0) + 1;
+      return acc;
+    }, {});
+    return Object.entries(counts)
+      .map(([name, count]) => ({ name, count }))
+      .sort((a, b) => a.name.localeCompare(b.name));
   }, [rawData.strengthRecords]);
 
   const scatterDistances = useMemo(() => {
@@ -155,10 +161,10 @@ export default function TrainingDashboard() {
   }, [availableDistances, whatIfInput.distance]);
 
   useEffect(() => {
-    if (!whatIfInput.exercise && strengthExercises.length) {
-      setWhatIfInput((p) => ({ ...p, exercise: strengthExercises[0] }));
+    if (!whatIfInput.exercise && strengthExerciseOptions.length) {
+      setWhatIfInput((p) => ({ ...p, exercise: strengthExerciseOptions[0].name }));
     }
-  }, [strengthExercises, whatIfInput.exercise]);
+  }, [strengthExerciseOptions, whatIfInput.exercise]);
 
   const handleExportCSV = () => {
     exportToCSV(rawData.sessions, rawData.raceRecords, `training-stats-${format(new Date(), 'yyyy-MM-dd')}.csv`);
@@ -187,7 +193,7 @@ export default function TrainingDashboard() {
 
   const handleWhatIf = async () => {
     const distance = whatIfInput.distance || availableDistances[0];
-    const exercise = whatIfInput.exercise || strengthExercises[0];
+    const exercise = whatIfInput.exercise || (strengthExerciseOptions[0]?.name);
     const targetWeight = Number(whatIfInput.targetWeight);
     if (!distance || !exercise || !targetWeight) return;
     setWhatIfLoading(true);
@@ -312,12 +318,12 @@ export default function TrainingDashboard() {
             <div>
               <label className="text-gray-400 text-xs">Esercizio forza</label>
               <select
-                value={whatIfInput.exercise || strengthExercises[0] || ''}
+                value={whatIfInput.exercise || (strengthExerciseOptions[0]?.name) || ''}
                 onChange={(e) => setWhatIfInput((p) => ({ ...p, exercise: e.target.value }))}
                 className="w-full mt-1 px-2 py-2 bg-slate-700 border border-slate-600 rounded text-white text-sm"
               >
-                {strengthExercises.map((ex) => (
-                  <option key={ex} value={ex}>{ex}</option>
+                {strengthExerciseOptions.map((ex) => (
+                  <option key={ex.name} value={ex.name}>{ex.name} ({ex.count})</option>
                 ))}
               </select>
             </div>
@@ -333,7 +339,7 @@ export default function TrainingDashboard() {
             </div>
             <button
               onClick={handleWhatIf}
-              disabled={whatIfLoading || !availableDistances.length || !strengthExercises.length}
+              disabled={whatIfLoading || !availableDistances.length || !strengthExerciseOptions.length}
               className="w-full px-3 py-2 bg-primary-600 hover:bg-primary-700 disabled:opacity-50 text-white rounded-lg text-sm"
             >
               {whatIfLoading ? 'Calcolo...' : 'Stima tempo atteso'}
