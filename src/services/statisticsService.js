@@ -54,7 +54,7 @@ export async function getStatsData(startDate = null, endDate = null) {
     const trainingRecords = [];
 
     const isWarmup = (name) => {
-      if (typeof name !== 'string') return false;
+      if (!name || typeof name !== 'string') return false;
       return /riscald|warm\s?-?up|attivazione|drills/i.test(name);
     };
 
@@ -403,7 +403,9 @@ export function getMonthlyMetrics(sessions, raceRecords) {
   const monthlyData = {};
 
   raceRecords.forEach(record => {
-    const date = new Date(record.date || record.created_at);
+    const rawDate = record.date || record.created_at;
+    const date = new Date(rawDate);
+    if (Number.isNaN(date.getTime())) return;
     const monthKey = format(date, 'yyyy-MM');
 
     if (!monthlyData[monthKey]) {

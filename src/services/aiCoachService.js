@@ -122,7 +122,7 @@ export async function getWeeklyInsight({ sessions = [], raceRecords = [], streng
   const strengthPeaks = strengthRecords
     .filter(s => s.exercise_name)
     .reduce((acc, set) => {
-      const key = set.exercise_name;
+      const key = (set.exercise_name || '').trim().toLowerCase();
       const maxWeight = Math.max(acc[key]?.maxWeight || 0, Number(set.weight_kg || 0));
       acc[key] = { exercise: key, maxWeight, lastDate: set.date || set.created_at };
       return acc;
