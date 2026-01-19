@@ -51,10 +51,18 @@ async function insertTrainingSession(parsedData) {
  */
 async function saveExtractedRecords(sessionId, sessionDate, personalBests = [], injuries = []) {
   try {
-    // Salva i PB con validazione
+    // NOTA: Logica PB temporaneamente disabilitata
+    // Le tabelle race_records, training_records, strength_records
+    // sono state eliminate nel nuovo schema
+    // I PB sono ora gestiti direttamente in workout_sets
+    
+    // TODO: Implementare tracking PB in workout_sets con campo details.is_pb
+    console.log('[saveExtractedRecords] PB tracking temporaneamente disabilitato (tabelle obsolete rimosse)');
+    console.log('[saveExtractedRecords] PB ricevuti:', personalBests);
+    
+    /* OLD CODE - DISABLED
     for (const pb of personalBests) {
       if (pb.type === 'race') {
-        // Valida se è davvero un PB controllando i record esistenti
         const { data: existingRecords } = await supabase
           .from('race_records')
           .select('time_s')
@@ -70,7 +78,6 @@ async function saveExtractedRecords(sessionId, sessionDate, personalBests = [], 
           is_personal_best: isTruePB,
         });
       } else if (pb.type === 'training') {
-        // PB di allenamento (sprint): confronta per esercizio/tempo
         const { data: existingTraining } = await supabase
           .from('training_records')
           .select('performance_value')
@@ -92,7 +99,6 @@ async function saveExtractedRecords(sessionId, sessionDate, personalBests = [], 
           is_personal_best: isTruePB,
         });
       } else if (pb.type === 'strength') {
-        // Valida se è davvero un PB massimale controllando i record esistenti
         const { data: existingRecords } = await supabase
           .from('strength_records')
           .select('weight_kg')
@@ -111,6 +117,7 @@ async function saveExtractedRecords(sessionId, sessionDate, personalBests = [], 
         });
       }
     }
+    */
 
     // Salva gli infortuni
     for (const injury of injuries) {

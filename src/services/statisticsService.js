@@ -28,18 +28,21 @@ export async function getStatsData(startDate = null, endDate = null) {
     });
 
     // Prendi tutti i dati e filtra lato client per evitare problemi di join/alias
-    const [sessionsRes, raceRes, trainingRes, strengthRes, injuriesRes] = await Promise.all([
+    // NOTA: race_records, training_records, strength_records sono state eliminate nel nuovo schema
+    const [sessionsRes, injuriesRes] = await Promise.all([
       supabase.from('training_sessions').select('*').order('date', { ascending: true }),
-      supabase.from('race_records').select('*, training_sessions(id, date)'),
-      supabase.from('training_records').select('*, training_sessions(id, date)'),
-      supabase.from('strength_records').select('*, training_sessions(id, date)'),
       supabase.from('injury_history').select('*'),
     ]);
 
-    if (sessionsRes.error || raceRes.error || trainingRes.error || strengthRes.error || injuriesRes.error) {
-      console.error('[statisticsService] Query error', { sessionsRes, raceRes, trainingRes, strengthRes, injuriesRes });
-      throw sessionsRes.error || raceRes.error || trainingRes.error || strengthRes.error || injuriesRes.error;
+    if (sessionsRes.error || injuriesRes.error) {
+      console.error('[statisticsService] Query error', { sessionsRes, injuriesRes });
+      throw sessionsRes.error || injuriesRes.error;
     }
+
+    // Tabelle obsolete rimosse - i dati sono ora in workout_sets
+    const raceRes = { data: [] };
+    const trainingRes = { data: [] };
+    const strengthRes = { data: [] };
 
     const inRange = (dateStr) => {
       if (!dateStr) return false;

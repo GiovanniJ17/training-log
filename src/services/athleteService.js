@@ -280,23 +280,24 @@ export async function resolveInjury(injuryId, endDate) {
  */
 export async function getPersonalBests() {
   try {
-    // Recupera i record senza JOIN prima
-    const [raceResult, trainingResult, strengthResult, sessionsResult] = await Promise.all([
-      supabase.from('race_records').select('*').eq('is_personal_best', true).order('id', { ascending: false }),
-      supabase.from('training_records').select('*').eq('is_personal_best', true).order('id', { ascending: false }),
-      supabase.from('strength_records').select('*').eq('is_personal_best', true).order('id', { ascending: false }),
+    // NOTA: Tabelle obsolete rimosse nel nuovo schema
+    // race_records, training_records, strength_records non esistono più
+    // I PB sono ora tracciati in workout_sets
+    const [sessionsResult] = await Promise.all([
       supabase.from('training_sessions').select('id, date'),
     ]);
 
-    if (raceResult.error || trainingResult.error || strengthResult.error || sessionsResult.error) {
+    if (sessionsResult.error) {
       console.error('[athleteService] Query error:', { 
-        raceResult: raceResult.error, 
-        trainingResult: trainingResult.error, 
-        strengthResult: strengthResult.error,
         sessionsResult: sessionsResult.error 
       });
-      throw raceResult.error || trainingResult.error || strengthResult.error || sessionsResult.error;
+      throw sessionsResult.error;
     }
+
+    // Placeholder per compatibilità - tabelle obsolete rimosse
+    const raceResult = { data: [] };
+    const trainingResult = { data: [] };
+    const strengthResult = { data: [] };
 
     // Crea un mappa di sessioni per lookup veloce
     const sessionsMap = {};
