@@ -34,7 +34,7 @@ export default function TrainingDashboard() {
   const [injuryTimeline, setInjuryTimeline] = useState([]);
   const [monthlyMetrics, setMonthlyMetrics] = useState([]);
   const [selectedDistance, setSelectedDistance] = useState(null);
-  const [rawData, setRawData] = useState({ sessions: [], raceRecords: [], strengthRecords: [], injuries: [] });
+  const [rawData, setRawData] = useState({ sessions: [], raceRecords: [], trainingRecords: [], strengthRecords: [], injuries: [] });
 
   useEffect(() => {
     loadDashboardData();
@@ -66,7 +66,7 @@ export default function TrainingDashboard() {
     const result = await getStatsData(start, end);
 
     if (result.success) {
-      const { sessions, raceRecords, strengthRecords, injuries } = result.data;
+      const { sessions, raceRecords, trainingRecords, strengthRecords, injuries } = result.data;
       console.log('[TrainingDashboard] fetched', {
         sessions: sessions.length,
         raceRecords: raceRecords.length,
@@ -75,10 +75,10 @@ export default function TrainingDashboard() {
         sessionDates: sessions.map(s => s.date),
         raceDates: raceRecords.map(r => r.training_sessions?.[0]?.date || r.training_sessions?.date || r.created_at),
       });
-      setRawData({ sessions, raceRecords, strengthRecords, injuries });
+      setRawData({ sessions, raceRecords, trainingRecords, strengthRecords, injuries });
 
       // Calcola tutte le metriche
-      const kpisCalc = calculateKPIs(sessions, raceRecords, strengthRecords);
+      const kpisCalc = calculateKPIs(sessions, raceRecords, strengthRecords, trainingRecords);
       setKpis(kpisCalc);
 
       const progression = getProgressionChartData(raceRecords);

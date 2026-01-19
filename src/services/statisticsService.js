@@ -28,16 +28,17 @@ export async function getStatsData(startDate = null, endDate = null) {
     });
 
     // Prendi tutti i dati e filtra lato client per evitare problemi di join/alias
-    const [sessionsRes, raceRes, strengthRes, injuriesRes] = await Promise.all([
+    const [sessionsRes, raceRes, trainingRes, strengthRes, injuriesRes] = await Promise.all([
       supabase.from('training_sessions').select('*').order('date', { ascending: true }),
       supabase.from('race_records').select('*, training_sessions(id, date)'),
+      supabase.from('training_records').select('*, training_sessions(id, date)'),
       supabase.from('strength_records').select('*, training_sessions(id, date)'),
       supabase.from('injury_history').select('*'),
     ]);
 
-    if (sessionsRes.error || raceRes.error || strengthRes.error || injuriesRes.error) {
-      console.error('[statisticsService] Query error', { sessionsRes, raceRes, strengthRes, injuriesRes });
-      throw sessionsRes.error || raceRes.error || strengthRes.error || injuriesRes.error;
+    if (sessionsRes.error || raceRes.error || trainingRes.error || strengthRes.error || injuriesRes.error) {
+      console.error('[statisticsService] Query error', { sessionsRes, raceRes, trainingRes, strengthRes, injuriesRes });
+      throw sessionsRes.error || raceRes.error || trainingRes.error || strengthRes.error || injuriesRes.error;
     }
 
     const inRange = (dateStr) => {
@@ -49,6 +50,7 @@ export async function getStatsData(startDate = null, endDate = null) {
     const sessions = (sessionsRes.data || []).filter(s => inRange(s.date));
     const getLinkedDate = (rec) => rec?.training_sessions?.[0]?.date || rec?.training_sessions?.date || rec?.created_at;
     const raceRecords = (raceRes.data || []).filter(r => inRange(getLinkedDate(r)));
+    const trainingRecords = (trainingRes.data || []).filter(r => inRange(getLinkedDate(r)));
     const strengthRecords = (strengthRes.data || []).filter(r => inRange(getLinkedDate(r)));
     const injuries = injuriesRes.data || [];
 
@@ -68,6 +70,7 @@ export async function getStatsData(startDate = null, endDate = null) {
       data: {
         sessions,
         raceRecords,
+        trainingRecords,
         strengthRecords,
         injuries,
       },
@@ -81,13 +84,13 @@ export async function getStatsData(startDate = null, endDate = null) {
 /**
  * Calcola KPI principali
  */
-export function calculateKPIs(sessions, raceRecords, strengthRecords) {
+export function calculateKPIs(sessions, raceRecords, strengthRecords, trainingRecords = []) {
   const stats = {
     totalSessions: sessions.length,
     totalVolume: 0,
     avgRPE: 0,
     sessionsByType: {},
-    pbCount: raceRecords.filter(r => r.is_personal_best).length,
+    pbCount: (raceRecords.filter(r => r.is_personal_best).length) + (trainingRecords.filter(t => t.is_personal_best).length),
     streak: calculateStreak(sessions),
   };
 

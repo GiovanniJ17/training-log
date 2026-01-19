@@ -79,20 +79,24 @@ async function callGemini(messages, model, apiKey) {
   try {
     const url = `https://generativelanguage.googleapis.com/v1/models/${model}:generateContent?key=${apiKey}`;
     
+    const requestBody = {
+      contents: [{
+        parts: [{ text: fullPrompt }]
+      }],
+      generationConfig: {
+        temperature: 0.1,
+        maxOutputTokens: 8192
+      }
+    };
+    
+    console.log('[Gemini] Using JSON Mode for structured response');
+    
     const response = await fetch(url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify({
-        contents: [{
-          parts: [{ text: fullPrompt }]
-        }],
-        generationConfig: {
-          temperature: 0.1,
-          maxOutputTokens: 8192
-        }
-      })
+      body: JSON.stringify(requestBody)
     });
 
     const data = await response.json();

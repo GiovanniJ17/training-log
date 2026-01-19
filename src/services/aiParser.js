@@ -12,6 +12,16 @@ CRITICAL RULES:
 3. DISTANCES: Always meters. "12km" = 12000m, "1.5km" = 1500m
 4. PACING: "4:30/km" over 12km = distance_m: 12000, time_s: null (or 12 * 270 = 3240s if you want total time)
 5. MULTIPLE EXERCISES: "5 esercizi 4x10" = create 5 SEPARATE exercise entries
+6. INTENT vs REALITY: When user mentions both goal and actual result, ALWAYS extract ACTUAL RESULT (reality), not goal.
+   * Example: "Volevo fare 35s ma ho fatto 36.2" → Extract time_s: 36.2 (actual), NOT 35 (goal)
+   * Example: "Obiettivo 10.5 ma fermato a 10.8" → Extract time_s: 10.8 (actual), NOT 10.5 (goal)
+   * Keywords: "volevo", "mirava", "dovrebbe", "ma ho fatto", "ma sono arrivato", "invece ho", "però", "purtroppo"
+
+NOISE FILTERING:
+- Ignore names of people ("Ho incontrato Marco...")
+- Ignore durations describing interruptions ("Marco mi ha fermato 20 minuti" is not training time)
+- Ignore emotional context ("allenamento strano", "finalmente ho iniziato")
+- Extract only measurable training data (times, distances, weights, reps)
 
 NUMERIC CONVERSIONS - EXACT ONLY:
 - Times (time_s): Decimal seconds with max 1 decimal
@@ -74,6 +84,10 @@ EXAMPLES:
      {exercise_name: "Esercizio 4", category:"lift", sets:4, reps:10, weight_kg:75},
      {exercise_name: "Esercizio 5", category:"lift", sets:4, reps:10, weight_kg:80}
    ]
+
+5. "Volevo fare 35 secondi ma ho fatto 36.2 sui 300m" → Extract ACTUAL result:
+   {exercise_name: "Sprint 300m", sets:1, distance_m:300, time_s:36.2, recovery_s:null}
+   NOT 35 seconds - that's the goal.
 
 OUTPUT: Valid JSON ONLY. NO markdown, NO code blocks, NO explanations.`;
 
@@ -176,6 +190,46 @@ function parseExplicitDate(str, reference = new Date()) {
   return formatLocalDate(d);
 }
 
+function parseRelativeDate(text, reference = new Date()) {
+  // Supporta: "ieri", "oggi", "domani", "3 giorni fa", "2 giorni fa", etc.
+  const lower = text.trim().toLowerCase();
+  
+  // Exact matches
+  if (lower === 'ieri' || lower === 'yesterday') {
+    const d = new Date(reference);
+    d.setDate(d.getDate() - 1);
+    return formatLocalDate(d);
+  }
+  if (lower === 'oggi' || lower === 'today') {
+    return formatLocalDate(reference);
+  }
+  if (lower === 'domani' || lower === 'tomorrow') {
+    const d = new Date(reference);
+    d.setDate(d.getDate() + 1);
+    return formatLocalDate(d);
+  }
+  
+  // Pattern: "N giorni fa"
+  const daysAgoMatch = text.match(/^(\d+)\s*(?:giorno|giorni|day|days)\s+fa\s*$/i);
+  if (daysAgoMatch) {
+    const days = parseInt(daysAgoMatch[1], 10);
+    const d = new Date(reference);
+    d.setDate(d.getDate() - days);
+    return formatLocalDate(d);
+  }
+  
+  // Pattern: "fra N giorni" / "in N giorni"
+  const daysFromNowMatch = text.match(/^(?:fra|in)\s+(\d+)\s*(?:giorno|giorni|day|days)\s*$/i);
+  if (daysFromNowMatch) {
+    const days = parseInt(daysFromNowMatch[1], 10);
+    const d = new Date(reference);
+    d.setDate(d.getDate() + days);
+    return formatLocalDate(d);
+  }
+  
+  return null;
+}
+
 function findDayChunks(text, reference = new Date()) {
   // Match giorni senza richiedere : o parentesi (più tollerante)
   const dayNames = ['lunedì', 'lunedi', 'martedì', 'martedi', 'mercoledì', 'mercoledi', 'giovedì', 'giovedi', 'venerdì', 'venerdi', 'sabato', 'domenica'];
@@ -214,6 +268,16 @@ function findDayChunks(text, reference = new Date()) {
     const explicitDate = dateMatch ? parseExplicitDate(dateMatch[1], reference) : null;
     const textWithoutDate = dateMatch ? cleaned.slice(dateMatch[1].length).trim() : cleaned;
     
+    // FILTER: Salta sessioni vuote (solo spazi, "niente", "riposo", punteggiatura)
+    const isEmpty = !textWithoutDate || 
+                    /^[\s.,!?-]*$/.test(textWithoutDate) || 
+                    /^\s*(niente|riposo|nulla|off|rest|completo|scarico)\s*[.,!?-]*$/i.test(textWithoutDate);
+    
+    if (isEmpty) {
+      console.log(`[findDayChunks] Skipping empty session on ${current.keyword}`);
+      continue;
+    }
+    
     chunks.push({
       weekday: current.keyword.toLowerCase(),
       heading: current.keyword.trim(),
@@ -238,16 +302,19 @@ function buildProxyRequest(provider, userPrompt) {
   return {
     ...baseRequest,
     model: 'gemini-2.5-flash',
+    // Usa JSON Mode nativo di Gemini per risposta strutturata
+    responseFormat: { type: 'json_object' },
     ...(isProd ? {} : { apiKey: import.meta.env.VITE_GEMINI_API_KEY })
   };
 }
 
 async function parseSingleDay({ text, date, titleHint, devApiKey = null }) {
-  const provider = 'gemini'; // Solo Gemini
-  const textSummary = buildTextSummary(text);
+  try {
+    const provider = 'gemini'; // Solo Gemini
+    const textSummary = buildTextSummary(text);
 
-  // Template con esempi concreti di esercizi
-  const jsonTemplate = `{
+    // Template con esempi concreti di esercizi
+    const jsonTemplate = `{
   "session": {"date":"${date}","title":"${titleHint || 'Session'}","type":"pista","rpe":null,"feeling":null,"notes":null},
   "groups": [
     {"name":"Riscaldamento","order_index":0,"notes":null,"sets":[
@@ -320,138 +387,97 @@ Return ONLY valid JSON. Do not include markdown or explanations.`;
   // Estratto JSON dal response
   let jsonStr = rawContent.trim();
   
-  // Se avvolto in markdown, estrai
+  // Con JSON Mode di Gemini, dovrebbe essere già JSON puro
+  // Ma manteniamo fallback per markdown code blocks (compatibilità)
   if (jsonStr.startsWith('```')) {
     const match = jsonStr.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
     if (match) jsonStr = match[1];
   }
 
-  // Prova a trovare oggetto JSON
-  const jsonMatch = jsonStr.match(/\{[\s\S]*\}/);
-  if (!jsonMatch) {
-    console.error('[parseSingleDay] No JSON object found');
-    throw new Error('Risposta AI non contiene JSON');
-  }
-
-  jsonStr = jsonMatch[0];
-
+  // JSON Mode di Gemini ritorna JSON direttamente, parsing diretto
+  let parsed;
   try {
-    // Normalizza le stringhe multilinea
-    jsonStr = jsonStr.replace(/: "([^"]*)"\s*,/g, (match, value) => {
-      const sanitized = value.replace(/\n/g, ' ').replace(/"/g, '\\"');
-      return `: "${sanitized}",`;
-    });
+    parsed = JSON.parse(jsonStr);
+    console.log('[parseSingleDay] JSON Mode parsing successful');
+  } catch (e) {
+    console.warn(`[parseSingleDay] Direct JSON parsing failed, trying to extract JSON object...`);
+    
+    // Fallback: estrai oggetto JSON se c'è testo extra
+    const jsonMatch = jsonStr.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) {
+      console.error('[parseSingleDay] No JSON object found');
+      throw new Error('Risposta AI non contiene JSON');
+    }
 
-    // Fix: aggiungi { mancanti dopo array opening
-    jsonStr = jsonStr.replace(/\[\s*"(name|order_index)/g, '[{"$1');
-    jsonStr = jsonStr.replace(/\[\s*"name":/g, '[{"name":');
-
-    // Fix: chiudi oggetti in array se necessario
-    jsonStr = jsonStr.replace(/}(\s*),(\s*)\]/g, '}$1]');
-
-    // Rimuovi trailing comma
-    jsonStr = jsonStr.replace(/,(\s*[}\]])/g, '$1');
-
-    // Fix: aggiungi virgola mancante tra proprietà se "name" viene direttamente dopo [
-    jsonStr = jsonStr.replace(/\[\s*"name"/g, '[{"name"');
-
-    // Prova il parsing
-    let parsed;
+    jsonStr = jsonMatch[0];
+    
     try {
       parsed = JSON.parse(jsonStr);
-    } catch (e) {
-      console.warn(`[parseSingleDay] First parse attempt failed, trying cleanup...`);
-      
-      // Fallback: rimuovi le parti malformate e mantieni quello che c'è
-      // Estrai session
-      const sessionMatch = jsonStr.match(/"session"\s*:\s*\{[^{}]*\}/);
-      const sessionStr = sessionMatch ? sessionMatch[0] : '{"date":"' + date + '","title":"Session","type":"altro","rpe":null,"feeling":null,"notes":null}';
-      
-      // Estrai groups più semplicemente
-      const groupsMatch = jsonStr.match(/"groups"\s*:\s*\[([\s\S]*)\]\s*\}/);
-      let groupsStr = '[]';
-      if (groupsMatch) {
-        try {
-          // Prova a parsare i groups come array
-          groupsStr = '[' + groupsMatch[1] + ']';
-          // Valida che sia almeno parsabile
-          JSON.parse(groupsStr);
-        } catch {
-          // Se fallisce, crea un placeholder
-          groupsStr = '[{"name":"Sessione","order_index":0,"notes":null,"sets":[{"exercise_name":"Sessione registrata","category":"other","sets":1,"reps":1,"weight_kg":null,"distance_m":null,"time_s":null,"recovery_s":null,"notes":null,"details":{}}]}]';
-        }
-      }
-
-      // Ricostruisci il JSON
-      try {
-        parsed = {
-          session: JSON.parse(sessionStr),
-          groups: JSON.parse(groupsStr)
-        };
-      } catch (e2) {
-        console.error(`[parseSingleDay] Fallback also failed, using minimal structure`);
-        parsed = {
-          session: { date, title: 'Session', type: 'altro', rpe: null, feeling: null, notes: null },
-          groups: [{
-            name: 'Sessione',
-            order_index: 0,
-            notes: null,
-            sets: [{
-              exercise_name: 'Sessione registrata',
-              category: 'other',
-              sets: 1,
-              reps: 1,
-              weight_kg: null,
-              distance_m: null,
-              time_s: null,
-              recovery_s: null,
-              notes: 'Contenuto estratto',
-              details: {}
-            }]
+    } catch (e2) {
+      console.warn(`[parseSingleDay] Second parse attempt failed, using minimal structure...`);
+      // Fallback: struttura minima
+      parsed = {
+        session: { date, title: 'Session', type: 'altro', rpe: null, feeling: null, notes: null },
+        groups: [{
+          name: 'Sessione',
+          order_index: 0,
+          notes: null,
+          sets: [{
+            exercise_name: 'Sessione registrata',
+            category: 'other',
+            sets: 1,
+            reps: 1,
+            weight_kg: null,
+            distance_m: null,
+            time_s: null,
+            recovery_s: null,
+            notes: 'Contenuto estratto',
+            details: {}
           }]
-        };
-      }
+        }]
+      };
     }
+  }
 
-    // Garantisci struttura
-    if (!parsed.session) parsed.session = {};
-    if (!parsed.groups) parsed.groups = [];
+  // Garantisci struttura
+  if (!parsed.session) parsed.session = {};
+  if (!parsed.groups) parsed.groups = [];
 
-    parsed.session.date = date;
-    if (!parsed.session.title || !parsed.session.title.trim()) {
-      parsed.session.title = textSummary || titleHint || 'Sessione';
-    }
-    if (!parsed.session.notes || !parsed.session.notes.trim()) {
-      parsed.session.notes = textSummary || parsed.session.notes || null;
-    }
+  parsed.session.date = date;
+  if (!parsed.session.title || !parsed.session.title.trim()) {
+    parsed.session.title = textSummary || titleHint || 'Sessione';
+  }
+  if (!parsed.session.notes || !parsed.session.notes.trim()) {
+    parsed.session.notes = textSummary || parsed.session.notes || null;
+  }
 
-    // Valida e ripulisci groups
-    parsed.groups = parsed.groups.map(group => ({
-      ...group,
-      sets: (group.sets || [])
-        .filter(set => set && set.exercise_name && set.exercise_name.trim())
-        .map(set => ({
-          exercise_name: (set.exercise_name || 'Unknown').trim(),
-          category: set.category || 'other',
-          sets: parseInt(set.sets) || 1,
-          reps: parseInt(set.reps) || 1,
-          weight_kg: set.weight_kg ? parseFloat(set.weight_kg) : null,
-          distance_m: set.distance_m ? parseFloat(set.distance_m) : null,
-          time_s: set.time_s ? parseFloat(set.time_s) : null,
-          recovery_s: set.recovery_s ? parseFloat(set.recovery_s) : null,
-          notes: set.notes || null,
-          details: set.details || {}
-        }))
-    }))
-    .filter(group => group.sets && group.sets.length > 0);
+  // Valida e ripulisci groups
+  parsed.groups = parsed.groups.map(group => ({
+    ...group,
+    sets: (group.sets || [])
+      .filter(set => set && set.exercise_name && set.exercise_name.trim())
+      .map(set => ({
+        exercise_name: (set.exercise_name || 'Unknown').trim(),
+        category: set.category || 'other',
+        sets: parseInt(set.sets) || 1,
+        reps: parseInt(set.reps) || 1,
+        weight_kg: set.weight_kg ? parseFloat(set.weight_kg) : null,
+        distance_m: set.distance_m ? parseFloat(set.distance_m) : null,
+        time_s: set.time_s ? parseFloat(set.time_s) : null,
+        recovery_s: set.recovery_s ? parseFloat(set.recovery_s) : null,
+        notes: set.notes || null,
+        details: set.details || {}
+      }))
+  }))
+  .filter(group => group.sets && group.sets.length > 0);
 
-    // Valida type
-    const validTypes = ['pista', 'palestra', 'strada', 'gara', 'test', 'scarico', 'recupero', 'altro'];
-    if (parsed.session.type && !validTypes.includes(parsed.session.type.toLowerCase())) {
-      parsed.session.type = 'altro';
-    }
+  // Valida type
+  const validTypes = ['pista', 'palestra', 'strada', 'gara', 'test', 'scarico', 'recupero', 'altro'];
+  if (parsed.session.type && !validTypes.includes(parsed.session.type.toLowerCase())) {
+    parsed.session.type = 'altro';
+  }
 
-    return parsed;
+  return parsed;
   } catch (e) {
     console.error(`[parseSingleDay] Final error: ${e.message}`);
     throw new Error(`Parsing ${date}: ${e.message}`);
@@ -486,6 +512,33 @@ function inferRpeFromText(text) {
 export async function parseTrainingWithAI(trainingText, referenceDate = new Date()) {
   let trimmed = trainingText?.trim();
   if (!trimmed) throw new Error('Testo allenamento vuoto');
+  
+  // PREPROCESSING: Controlla relative dates nel testo
+  // Pattern: "Ieri ho fatto..." oppure "Oggi..." oppure "Domani..."
+  const relativeDateMatch = trimmed.match(/^(ieri|oggi|domani|[\d]+\s+(?:giorno|giorni|day|days)\s+fa|fra\s+[\d]+\s+(?:giorno|giorni|day|days)|in\s+[\d]+\s+(?:giorno|giorni|day|days))\b/i);
+  if (relativeDateMatch) {
+    const relativeDate = parseRelativeDate(relativeDateMatch[1], referenceDate);
+    if (relativeDate) {
+      // Sostituisci "Ieri ho fatto..." con il testo senza il prefisso relativo
+      trimmed = trimmed.slice(relativeDateMatch[0].length).trim();
+      // Usa la data relativa calcolata come data di riferimento
+      const parsedSingle = await parseSingleDay({
+        text: trimmed,
+        date: relativeDate,
+        titleHint: null
+      });
+      if (!parsedSingle.session.rpe) {
+        const inferred = inferRpeFromText(trimmed);
+        if (inferred) parsedSingle.session.rpe = inferred;
+      }
+      const personalBests = mergePersonalBests(
+        extractPersonalBests(trainingText),
+        derivePBsFromSessions([parsedSingle])
+      );
+      const injuries = extractInjuries(trainingText);
+      return { sessions: [parsedSingle], personalBests, injuries };
+    }
+  }
   
   // Cerca pattern "inizio settimana DD/MM/YYYY" o "settimana del DD/MM/YYYY"
   let weekReference = referenceDate;
@@ -527,7 +580,10 @@ export async function parseTrainingWithAI(trainingText, referenceDate = new Date
       sessions.push(parsed);
     }
 
-    const personalBests = extractPersonalBests(trimmed);
+    const personalBests = mergePersonalBests(
+      extractPersonalBests(trimmed),
+      derivePBsFromSessions(sessions)
+    );
     const injuries = extractInjuries(trimmed);
     return { sessions, personalBests, injuries };
   }
@@ -552,7 +608,10 @@ export async function parseTrainingWithAI(trainingText, referenceDate = new Date
     if (inferred) parsed.session.rpe = inferred;
   }
 
-  const personalBests = extractPersonalBests(trimmed);
+  const personalBests = mergePersonalBests(
+    extractPersonalBests(trimmed),
+    derivePBsFromSessions([parsed])
+  );
   const injuries = extractInjuries(trimmed);
   return { sessions: [parsed], personalBests, injuries };
 }
@@ -698,16 +757,23 @@ export function validateParsedData(data) {
 export function extractPersonalBests(text) {
   const pbs = [];
 
-  // PB gara esplicito: "100m 10.5sec PB"
+  // PB esplicito: "100m 10.5sec PB" (classifica come gara solo se il contesto contiene gara/competizione)
   const racePattern = /(\d+)\s*m(?:etri?)?\s+(?:in\s+)?(\d+[.,]\d+|\d+)\s*(?:sec|s)?\s+(?:PB|personal\s+best|nuovo\s+record|miglior\s+tempo)/gi;
   let match;
   while ((match = racePattern.exec(text)) !== null) {
-    pbs.push({ type: 'race', distance_m: parseInt(match[1]), time_s: parseFloat(match[2].replace(',', '.')), is_personal_best: true });
+    const distance = parseInt(match[1]);
+    const time = parseFloat(match[2].replace(',', '.'));
+    const isCompetition = /\bgara\b|\bcompetizione\b/i.test(text);
+    if (isCompetition) {
+      pbs.push({ type: 'race', distance_m: distance, time_s: time, is_personal_best: true });
+    } else {
+      pbs.push({ type: 'training', exercise_name: `Sprint ${distance}m`, exercise_type: 'sprint', performance_value: time, performance_unit: 'seconds', is_personal_best: true });
+    }
   }
 
-  // PB gara implicito in contesto gara/pista: "gara 60m 7.18" oppure "gara 100 10.40"
-  if (text.match(/\bgara\b|\bpista\b|\bcompetizione\b|\bgare\b/i)) {
-    const implicitRacePattern = /(?:gara|pista|competizione)\s*:?\s*(\d+)\s*m?(?:etri)?\s+(?:in\s+)?(\d+[.,]\d+|\d+)\s*(?:sec|s)?(?!\s+(?:x|serie|set|\d+x))/gi;
+  // PB implicito in contesto gara: "gara 60m 7.18" oppure "competizione 100 10.40"
+  if (text.match(/\bgara\b|\bcompetizione\b|\bgare\b/i)) {
+    const implicitRacePattern = /(?:gara|competizione)\s*:?\s*(\d+)\s*m?(?:etri)?\s+(?:in\s+)?(\d+[.,]\d+|\d+)\s*(?:sec|s)?(?!\s+(?:x|serie|set|\d+x))/gi;
     while ((match = implicitRacePattern.exec(text)) !== null) {
       const distance = parseInt(match[1]);
       const time = parseFloat(match[2].replace(',', '.'));
@@ -718,7 +784,20 @@ export function extractPersonalBests(text) {
     }
   }
 
-  // PB gara implicito GENERICO (es. "test 150m 19.8" o "60m 7.20" anche senza parola gara)
+  // PB implicito in contesto pista (allenamento): "pista 150m 19.8"
+  if (text.match(/\bpista\b/i)) {
+    const implicitTrainingPattern = /pista\s*:?\s*(\d+)\s*m?(?:etri)?\s+(?:in\s+)?(\d+[.,]\d+|\d+)\s*(?:sec|s)?(?!\s+(?:x|serie|set|\d+x))/gi;
+    while ((match = implicitTrainingPattern.exec(text)) !== null) {
+      const distance = parseInt(match[1]);
+      const time = parseFloat(match[2].replace(',', '.'));
+      const isDuplicate = pbs.some(pb => pb.type === 'training' && pb.exercise_type === 'sprint' && pb.performance_unit === 'seconds' && pb.exercise_name === `Sprint ${distance}m` && Math.abs(pb.performance_value - time) < 0.1);
+      if (!isDuplicate) {
+        pbs.push({ type: 'training', exercise_name: `Sprint ${distance}m`, exercise_type: 'sprint', performance_value: time, performance_unit: 'seconds', is_personal_best: true, implicit: true });
+      }
+    }
+  }
+
+  // PB implicito GENERICO di allenamento/test (es. "test 150m 19.8" o "60m 7.20")
   if (text.match(/\btest\b|\bsforzo\b|\bmassimo\b|\btempo\b|\bcronometro\b/i)) {
     // Consente poche parole tra distanza e tempo (es. "300m ripetuta singola in 36.5") ma blocca pattern di ripetizioni (x, serie, volte)
     // Richiede o "in <tempo>" oppure un'unità (sec/s/"), per non scambiare RPE o conteggi per tempi
@@ -734,9 +813,9 @@ export function extractPersonalBests(text) {
       if (time <= 0 || time > 600) continue; // taglia tempi fuori scala
       const minPlausible = distance / 12; // es: 100m -> ~8.3s minimo plausibile
       if (time < minPlausible) continue; // scarta conteggi o RPE (es. "60m ... intensità 8")
-      const isDuplicate = pbs.some(pb => pb.type === 'race' && pb.distance_m === distance && Math.abs(pb.time_s - time) < 0.1);
+      const isDuplicate = pbs.some(pb => pb.type === 'training' && pb.exercise_name === `Sprint ${distance}m` && Math.abs(pb.performance_value - time) < 0.1);
       if (!isDuplicate) {
-        pbs.push({ type: 'race', distance_m: distance, time_s: time, is_personal_best: true, implicit: true, generic: true });
+        pbs.push({ type: 'training', exercise_name: `Sprint ${distance}m`, exercise_type: 'sprint', performance_value: time, performance_unit: 'seconds', is_personal_best: true, implicit: true, generic: true });
       }
     }
   }
@@ -774,6 +853,60 @@ export function extractPersonalBests(text) {
   }
 
   return pbs;
+}
+
+// =====================
+// PB derivati dai dati parsati (senza affidarsi al testo grezzo)
+// =====================
+
+function isPlausibleSprint(distance, time) {
+  if (!distance || !time) return false;
+  if (time <= 0 || time > 600) return false;
+  const minPlausible = distance / 12; // es: 100m -> ~8.3s minimo plausibile
+  return time >= minPlausible;
+}
+
+export function derivePBsFromSessions(sessions) {
+  const pbs = [];
+  if (!sessions || sessions.length === 0) return pbs;
+
+  sessions.forEach(session => {
+    const sessionType = (session.session?.type || '').toLowerCase();
+    const isCompetition = sessionType === 'gara';
+
+    (session.groups || []).forEach(group => {
+      (group.sets || []).forEach(set => {
+        const distance = set.distance_m || null;
+        const time = set.time_s || null;
+        if (!distance || !time) return;
+        if (!isPlausibleSprint(distance, time)) return;
+
+        if (isCompetition) {
+          const duplicate = pbs.some(pb => pb.type === 'race' && pb.distance_m === distance && Math.abs(pb.time_s - time) < 0.05);
+          if (!duplicate) {
+            pbs.push({ type: 'race', distance_m: distance, time_s: time, is_personal_best: true, derived: true });
+          }
+        } else {
+          const exerciseName = `Sprint ${distance}m`;
+          const duplicate = pbs.some(pb => pb.type === 'training' && pb.exercise_name === exerciseName && Math.abs(pb.performance_value - time) < 0.05);
+          if (!duplicate) {
+            pbs.push({ type: 'training', exercise_name: exerciseName, exercise_type: 'sprint', performance_value: time, performance_unit: 'seconds', is_personal_best: true, derived: true });
+          }
+        }
+      });
+    });
+  });
+
+  return pbs;
+}
+
+export function mergePersonalBests(textPBs, derivedPBs) {
+  const merged = [...(textPBs || [])];
+  (derivedPBs || []).forEach(pb => {
+    const duplicate = merged.some(m => m.type === pb.type && m.distance_m === pb.distance_m && Math.abs(m.time_s - pb.time_s) < 0.05);
+    if (!duplicate) merged.push(pb);
+  });
+  return merged;
 }
 
 export function extractInjuries(text) {

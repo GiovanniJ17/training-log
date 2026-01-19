@@ -229,9 +229,12 @@ export default function AITrainingInput({ onDataSaved }) {
                   <h3 className="text-sm font-semibold text-primary-300 mb-2">📋 Dati Auto-Estratti:</h3>
                   {parsedData.personalBests?.length > 0 && (
                     <div className="text-xs text-gray-300 mb-2">
-                      <strong>PB:</strong> {parsedData.personalBests.map(pb => 
-                        pb.type === 'race' ? `${pb.distance_m}m ${pb.time_s}s` : `${pb.exercise_name} ${pb.weight_kg}kg`
-                      ).join(', ')}
+                      <strong>PB:</strong> {parsedData.personalBests.map(pb => {
+                        if (pb.type === 'race') return `${pb.distance_m}m ${pb.time_s}s`;
+                        if (pb.type === 'training') return `${pb.exercise_name} ${pb.performance_value}${pb.performance_unit === 'seconds' ? 's' : ' ' + pb.performance_unit}`;
+                        if (pb.type === 'strength') return `${pb.exercise_name} ${pb.weight_kg}kg`;
+                        return pb.exercise_name || 'PB';
+                      }).join(', ')}
                     </div>
                   )}
                   {parsedData.injuries?.length > 0 && (

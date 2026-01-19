@@ -99,6 +99,28 @@ async function saveExtractedRecords(sessionId, sessionDate, personalBests = [], 
           time_s: pb.time_s,
           is_personal_best: isTruePB,
         });
+      } else if (pb.type === 'training') {
+        // PB di allenamento (sprint): confronta per esercizio/tempo
+        const { data: existingTraining } = await supabase
+          .from('training_records')
+          .select('performance_value')
+          .eq('exercise_type', 'sprint')
+          .eq('performance_unit', 'seconds')
+          .eq('exercise_name', pb.exercise_name)
+          .order('performance_value', { ascending: true })
+          .limit(1);
+
+        const isTruePB = !existingTraining || existingTraining.length === 0 || pb.performance_value < existingTraining[0].performance_value;
+
+        await addTrainingRecord(sessionId, {
+          exercise_name: pb.exercise_name,
+          exercise_type: pb.exercise_type || 'sprint',
+          performance_value: pb.performance_value,
+          performance_unit: pb.performance_unit || 'seconds',
+          rpe: pb.rpe || null,
+          notes: pb.notes || null,
+          is_personal_best: isTruePB,
+        });
       } else if (pb.type === 'strength') {
         // Valida se è davvero un PB massimale controllando i record esistenti
         const { data: existingRecords } = await supabase
