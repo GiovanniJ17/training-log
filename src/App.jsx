@@ -1,10 +1,11 @@
 import { useState } from 'react';
-import { PlusCircle, BarChart3 } from 'lucide-react';
+import { PlusCircle, BarChart3, Calendar } from 'lucide-react';
 import AITrainingInput from './components/AITrainingInput';
 import TrainingDashboard from './components/TrainingDashboard';
+import SessionHistory from './components/History/SessionHistory';
 
 function App() {
-  const [activeTab, setActiveTab] = useState('input'); // 'input' o 'dashboard'
+  const [activeTab, setActiveTab] = useState('input'); // 'input', 'stats', 'history'
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
@@ -28,18 +29,29 @@ function App() {
                 }`}
               >
                 <PlusCircle className="w-5 h-5" />
-                Nuovo Allenamento
+                Inserimento
               </button>
               <button
-                onClick={() => setActiveTab('dashboard')}
+                onClick={() => setActiveTab('stats')}
                 className={`px-6 py-2.5 rounded-lg font-medium transition-all flex items-center gap-2 ${
-                  activeTab === 'dashboard'
+                  activeTab === 'stats'
                     ? 'bg-primary-600 text-white shadow-lg shadow-primary-600/30'
                     : 'bg-slate-800 text-gray-300 hover:bg-slate-700'
                 }`}
               >
                 <BarChart3 className="w-5 h-5" />
-                Dashboard
+                Statistiche
+              </button>
+              <button
+                onClick={() => setActiveTab('history')}
+                className={`px-6 py-2.5 rounded-lg font-medium transition-all flex items-center gap-2 ${
+                  activeTab === 'history'
+                    ? 'bg-primary-600 text-white shadow-lg shadow-primary-600/30'
+                    : 'bg-slate-800 text-gray-300 hover:bg-slate-700'
+                }`}
+              >
+                <Calendar className="w-5 h-5" />
+                Storico
               </button>
             </nav>
           </div>
@@ -48,11 +60,9 @@ function App() {
 
       {/* Main content */}
       <main className="py-8">
-        {activeTab === 'input' ? (
-          <AITrainingInput />
-        ) : (
-          <TrainingDashboard />
-        )}
+        {activeTab === 'input' && <AITrainingInput />}
+        {activeTab === 'stats' && <TrainingDashboard />}
+        {activeTab === 'history' && <SessionHistory />}
       </main>
 
       {/* Footer */}

@@ -1,4 +1,5 @@
 import { supabase } from '../lib/supabase';
+import { format } from 'date-fns';
 import { standardizeTrainingSession } from '../utils/standardizer.js';
 
 /**
@@ -235,6 +236,144 @@ export async function getTrainingStats(startDate, endDate) {
     };
   } catch (error) {
     console.error('Errore nel recupero statistiche:', error);
+    return { success: false, error: error.message };
+  }
+}
+
+/**
+ * Recupera sessioni per un giorno specifico
+ */
+export async function getSessionsByDate(date) {
+  try {
+    const dateStr = date instanceof Date ? format(date, 'yyyy-MM-dd') : date;
+    
+    const { data: sessions, error } = await supabase
+      .from('training_sessions')
+      .select('*')
+      .eq('date', dateStr)
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+    return { success: true, data: sessions };
+  } catch (error) {
+    console.error('Errore nel recupero sessioni per data:', error);
+    return { success: false, error: error.message };
+  }
+}
+
+/**
+ * Recupera sessioni per un mese (optimizzato per vista calendario)
+ */
+export async function getSessionsForMonth(year, month) {
+  try {
+    const startDate = format(new Date(year, month, 1), 'yyyy-MM-dd');
+    const endDate = format(new Date(year, month + 1, 0), 'yyyy-MM-dd');
+
+    const { data: sessions, error } = await supabase
+      .from('training_sessions')
+      .select('id, date, type, title, rpe')
+      .gte('date', startDate)
+      .lte('date', endDate)
+      .order('date', { ascending: true });
+
+    if (error) throw error;
+    
+    // Organizza per data
+    const sessionsByDate = {};
+    sessions.forEach(session => {
+      if (!sessionsByDate[session.date]) {
+        sessionsByDate[session.date] = [];
+      }
+      sessionsByDate[session.date].push(session);
+    });
+
+    return { success: true, data: sessionsByDate };
+  } catch (error) {
+    console.error('Errore nel recupero sessioni per mese:', error);
+    return { success: false, error: error.message };
+  }
+}
+
+/**
+ * Aggiorna una sessione di allenamento (metadati)
+ */
+export async function updateTrainingSession(sessionId, updates) {
+  try {
+    const { data, error } = await supabase
+      .from('training_sessions')
+      .update({
+        title: updates.title !== undefined ? updates.title : undefined,
+        type: updates.type !== undefined ? updates.type : undefined,
+        location: updates.location !== undefined ? updates.location : undefined,
+        rpe: updates.rpe !== undefined ? updates.rpe : undefined,
+        feeling: updates.feeling !== undefined ? updates.feeling : undefined,
+        notes: updates.notes !== undefined ? updates.notes : undefined,
+      })
+      .eq('id', sessionId)
+      .select()
+      .single();
+
+    if (error) throw error;
+    return { success: true, data };
+  } catch (error) {
+    console.error('Errore nell\'aggiornamento sessione:', error);
+    return { success: false, error: error.message };
+  }
+}
+
+/**
+ * Aggiorna un singolo esercizio (workout set)
+ */
+export async function updateWorkoutSet(setId, updates) {
+  try {
+    const updateObj = {};
+    
+    if (updates.exercise_name !== undefined) updateObj.exercise_name = updates.exercise_name;
+    if (updates.category !== undefined) updateObj.category = updates.category;
+    if (updates.sets !== undefined) updateObj.sets = updates.sets;
+    if (updates.reps !== undefined) updateObj.reps = updates.reps;
+    if (updates.weight_kg !== undefined) updateObj.weight_kg = updates.weight_kg;
+    if (updates.distance_m !== undefined) updateObj.distance_m = updates.distance_m;
+    if (updates.time_s !== undefined) updateObj.time_s = updates.time_s;
+    if (updates.recovery_s !== undefined) updateObj.recovery_s = updates.recovery_s;
+    if (updates.notes !== undefined) updateObj.notes = updates.notes;
+    if (updates.details !== undefined) updateObj.details = updates.details;
+
+    const { data, error } = await supabase
+      .from('workout_sets')
+      .update(updateObj)
+      .eq('id', setId)
+      .select()
+      .single();
+
+    if (error) throw error;
+    return { success: true, data };
+  } catch (error) {
+    console.error('Errore nell\'aggiornamento esercizio:', error);
+    return { success: false, error: error.message };
+  }
+}
+
+/**
+ * Aggiorna un gruppo di esercizi
+ */
+export async function updateWorkoutGroup(groupId, updates) {
+  try {
+    const { data, error } = await supabase
+      .from('workout_groups')
+      .update({
+        name: updates.name !== undefined ? updates.name : undefined,
+        notes: updates.notes !== undefined ? updates.notes : undefined,
+        order_index: updates.order_index !== undefined ? updates.order_index : undefined,
+      })
+      .eq('id', groupId)
+      .select()
+      .single();
+
+    if (error) throw error;
+    return { success: true, data };
+  } catch (error) {
+    console.error('Errore nell\'aggiornamento gruppo:', error);
     return { success: false, error: error.message };
   }
 }

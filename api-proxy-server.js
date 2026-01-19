@@ -25,7 +25,7 @@ app.use((req, res, next) => {
 app.get('/', (req, res) => {
   res.json({ 
     status: '✅ API Proxy running on port 5000',
-    providers: ['gemini', 'groq', 'cloudflare', 'openai', 'anthropic']
+    providers: ['gemini']
   });
 });
 
@@ -35,6 +35,14 @@ app.post('/', async (req, res) => {
     const { provider, messages, model, apiKey, accountId, token } = req.body;
 
     console.log(`🔄 Processing ${provider} request...`);
+    
+    // 1. Cerca la chiave nell'header personalizzato (Dev Mode)
+    const customKey = req.headers['x-custom-api-key'];
+    console.log('[Proxy] Custom key from header:', customKey ? `${customKey.substring(0, 10)}...` : 'none');
+    
+    // 2. Priorità: custom header > body apiKey
+    const resolvedApiKey = (customKey && customKey.length > 10) ? customKey : apiKey;
+    console.log('[Proxy] Resolved API key:', resolvedApiKey ? `${resolvedApiKey.substring(0, 10)}...` : 'none');
 
     if (!provider) {
       return res.status(400).json({ error: 'Provider è obbligatorio' });
@@ -43,30 +51,10 @@ app.post('/', async (req, res) => {
     let apiResponse;
 
     if (provider === 'gemini') {
-      if (!apiKey) {
+      if (!resolvedApiKey) {
         return res.status(400).json({ error: 'Gemini: API key è obbligatorio' });
       }
-      apiResponse = await callGemini(messages, model || 'gemini-2.5-flash', apiKey);
-    } else if (provider === 'groq') {
-      if (!apiKey) {
-        return res.status(400).json({ error: 'Groq: API key è obbligatorio' });
-      }
-      apiResponse = await callGroq(messages, model || 'llama-3.1-70b-versatile', apiKey);
-    } else if (provider === 'cloudflare') {
-      if (!accountId || !token) {
-        return res.status(400).json({ error: 'Cloudflare: accountId e token sono obbligatori' });
-      }
-      apiResponse = await callCloudflareAI(messages, model || '@hf/mistral/mistral-7b-instruct-v0.2', accountId, token);
-    } else if (provider === 'openai') {
-      if (!apiKey) {
-        return res.status(400).json({ error: 'OpenAI: API key è obbligatorio' });
-      }
-      apiResponse = await callOpenAI(messages, model || 'gpt-4o', apiKey);
-    } else if (provider === 'anthropic') {
-      if (!apiKey) {
-        return res.status(400).json({ error: 'Anthropic: API key è obbligatorio' });
-      }
-      apiResponse = await callAnthropic(messages, model || 'claude-3-sonnet-20240229', apiKey);
+      apiResponse = await callGemini(messages, model || 'gemini-2.5-flash', resolvedApiKey);
     } else {
       return res.status(400).json({ error: `Provider non supportato: ${provider}` });
     }

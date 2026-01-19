@@ -7,7 +7,7 @@
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Custom-API-Key',
   'Access-Control-Max-Age': '3600'
 };
 
@@ -33,6 +33,8 @@ export default {
       const body = await request.json();
       const { provider, messages, model, apiKey } = body;
 
+      console.log('[Worker] Request received:', { provider, model, hasApiKey: !!apiKey, messagesCount: messages?.length });
+
       if (!provider) {
         return new Response(JSON.stringify({ error: { message: 'Provider è obbligatorio' } }), {
           status: 400,
@@ -40,22 +42,26 @@ export default {
         });
       }
 
-      const resolvedApiKey = apiKey || env.GEMINI_API_KEY;
+      // 1. Cerca la chiave nell'header personalizzato (Dev Mode)
+      const customKey = request.headers.get('X-Custom-API-Key');
+      console.log('[Worker] Custom key from header:', customKey ? `${customKey.substring(0, 10)}...` : 'none');
+      
+      // 2. Priorità: custom header > body apiKey > env variable
+      const resolvedApiKey = (customKey && customKey.length > 10) ? customKey : apiKey;
+      console.log('[Worker] Resolved API key:', resolvedApiKey ? `${resolvedApiKey.substring(0, 10)}...` : 'none');
 
       let result;
 
       if (provider === 'gemini') {
-        if (!resolvedApiKey) {
+        const geminiKey = resolvedApiKey || env.GEMINI_API_KEY;
+        if (!geminiKey) {
           return new Response(JSON.stringify({ error: { message: 'Gemini API key non configurata' } }), {
             status: 500,
             headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' }
           });
         }
-        result = await callGemini(messages, model || 'gemini-2.5-flash', resolvedApiKey);
-      } else if (provider === 'openai') {
-        result = await callOpenAI(messages, model || 'gpt-4o', apiKey);
-      } else if (provider === 'anthropic') {
-        result = await callAnthropic(messages, model || 'claude-3-sonnet-20240229', apiKey);
+        console.log('[Worker] Calling Gemini with model:', model || 'gemini-2.5-flash');
+        result = await callGemini(messages, model || 'gemini-2.5-flash', geminiKey);
       } else {
         return new Response(JSON.stringify({ error: { message: 'Provider non supportato' } }), {
           status: 400,

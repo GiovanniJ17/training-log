@@ -118,7 +118,7 @@ const WEEKDAY_INDEX = {
   venerdi: 5,
   'venerdì': 5,
   sabato: 6,
-  domenica: 0,
+  domenica: 7, // Domenica = 7 per restare nella stessa settimana
 };
 
 function startOfWeek(date = new Date()) {
@@ -191,63 +191,23 @@ function findDayChunks(text) {
 
 function buildProxyRequest(provider, userPrompt) {
   const baseRequest = {
-    provider,
+    provider: 'gemini',
     messages: [
       { role: 'system', content: AI_SYSTEM_PROMPT },
       { role: 'user', content: userPrompt }
     ]
   };
 
-  if (provider === 'gemini') {
-    const isProd = import.meta.env.MODE === 'production';
-    return {
-      ...baseRequest,
-      model: 'gemini-2.5-flash',
-      ...(isProd ? {} : { apiKey: import.meta.env.VITE_GEMINI_API_KEY })
-    };
-  }
-  if (provider === 'groq') {
-    return {
-      ...baseRequest,
-      model: 'llama-3.1-70b-versatile',
-      apiKey: import.meta.env.VITE_GROQ_API_KEY
-    };
-  }
-  if (provider === 'cloudflare') {
-    return {
-      ...baseRequest,
-      model: '@hf/mistral/mistral-7b-instruct-v0.2',
-      accountId: import.meta.env.VITE_CLOUDFLARE_ACCOUNT_ID,
-      token: import.meta.env.VITE_CLOUDFLARE_API_TOKEN
-    };
-  }
-  if (provider === 'huggingface') {
-    return {
-      ...baseRequest,
-      model: 'mistralai/Mistral-7B-Instruct-v0.2',
-      apiKey: import.meta.env.VITE_AI_API_KEY
-    };
-  }
-  if (provider === 'openai') {
-    return {
-      ...baseRequest,
-      model: 'gpt-4o',
-      apiKey: import.meta.env.VITE_AI_API_KEY
-    };
-  }
-  if (provider === 'anthropic') {
-    return {
-      ...baseRequest,
-      model: 'claude-3-sonnet-20240229',
-      apiKey: import.meta.env.VITE_AI_API_KEY
-    };
-  }
-
-  throw new Error(`Provider non supportato: ${provider}`);
+  const isProd = import.meta.env.MODE === 'production';
+  return {
+    ...baseRequest,
+    model: 'gemini-2.5-flash',
+    ...(isProd ? {} : { apiKey: import.meta.env.VITE_GEMINI_API_KEY })
+  };
 }
 
-async function parseSingleDay({ text, date, titleHint }) {
-  const provider = import.meta.env.VITE_AI_PROVIDER || 'gemini';
+async function parseSingleDay({ text, date, titleHint, devApiKey = null }) {
+  const provider = 'gemini'; // Solo Gemini
 
   // Template con esempi concreti di esercizi
   const jsonTemplate = `{
@@ -291,10 +251,25 @@ Return ONLY valid JSON. Do not include markdown or explanations.`;
     proxyUrl = import.meta.env.VITE_WORKER_URL || 'https://training-log-ai-proxy.giovanni-jecha.workers.dev';
   }
   
+  // Prepara headers con chiave custom se fornita
+  const headers = { 'Content-Type': 'application/json' };
+  if (devApiKey && devApiKey.trim().length > 10) {
+    headers['X-Custom-API-Key'] = devApiKey.trim();
+    console.log('[AI Parser] Using custom API key:', devApiKey.substring(0, 10) + '...');
+  }
+  
+  const requestBody = buildProxyRequest(provider, userPrompt);
+  console.log('[AI Parser] Request to worker:', { 
+    provider, 
+    model: requestBody.model,
+    hasCustomKey: !!headers['X-Custom-API-Key'],
+    hasBodyKey: !!requestBody.apiKey
+  });
+  
   const response = await fetch(proxyUrl, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(buildProxyRequest(provider, userPrompt))
+    headers,
+    body: JSON.stringify(requestBody)
   });
 
   if (!response.ok) {
@@ -453,8 +428,9 @@ Return ONLY valid JSON. Do not include markdown or explanations.`;
  * Interpreta testo di allenamento. Supporta più giorni nello stesso input.
  * - Se trova intestazioni con giorni (lunedì/martedì...), crea una sessione per ciascuna.
  * - Se non trova giorni, considera una sola sessione datata oggi.
+ * @param {string|null} devApiKey - Optional dev API key to override env key
  */
-export async function parseTrainingWithAI(trainingText, referenceDate = new Date()) {
+export async function parseTrainingWithAI(trainingText, referenceDate = new Date(), devApiKey = null) {
   const trimmed = trainingText?.trim();
   if (!trimmed) throw new Error('Testo allenamento vuoto');
   
@@ -468,7 +444,8 @@ export async function parseTrainingWithAI(trainingText, referenceDate = new Date
       const parsed = await parseSingleDay({
         text: chunk.text,
         date: targetDate,
-        titleHint: chunk.heading
+        titleHint: chunk.heading,
+        devApiKey
       });
       sessions.push(parsed);
     }
@@ -477,7 +454,7 @@ export async function parseTrainingWithAI(trainingText, referenceDate = new Date
 
   // Caso singolo giorno → data = oggi/reference
   const singleDate = formatLocalDate(new Date(referenceDate));
-  const parsed = await parseSingleDay({ text: trimmed, date: singleDate, titleHint: null });
+  const parsed = await parseSingleDay({ text: trimmed, date: singleDate, titleHint: null, devApiKey });
   return { sessions: [parsed] };
 }
 
