@@ -3,4 +3,4 @@ compatibility_date = "2024-01-01"
 pages_build_output_dir = "dist"
 
 [env.production]
-vars = { VITE_SUPABASE_URL = "https://nusfjbqxuqxynpdyqbcm.supabase.co", VITE_SUPABASE_ANON_KEY = "sb_publishable_lspCyoV98jMHB5_k3_L5qw_D3fQqCV5", VITE_AI_PROVIDER = "gemini", VITE_WORKER_URL = "https://training-log-ai-proxy.giovanni-jecha.workers.dev" }
+vars = { VITE_SUPABASE_URL = "https://nusfjbqxuqxynpdyqbcm.supabase.co", VITE_SUPABASE_ANON_KEY = "sb_publishable_lspCyoV98jMHB5_k3_L5qw_D3fQqCV5", VITE_AI_PROVIDER = "gemini", VITE_GEMINI_API_KEY = "AIzaSyAOLC1l2huOHPQ27qj8oHuRLCPu4ucMcrU", VITE_WORKER_URL = "https://training-log-ai-proxy.giovanni-jecha.workers.dev" }
