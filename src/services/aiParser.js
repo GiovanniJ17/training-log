@@ -42,6 +42,10 @@ NUMERIC CONVERSIONS - EXACT ONLY:
 
 SESSION TYPE: ONE of [pista, palestra, strada, gara, test, scarico, recupero, altro]
 
+TITLE & NOTES:
+- session.title must be a concise 4-8 word summary of the main work (e.g. "Pista 4x50m + Palestra forza")
+- session.notes must be a short 1-2 sentence narrative of the session from the user text (e.g. "Sessione in pista con 4x50m, intensità 7, poi palestra con squat e power clean.")
+
 EXAMPLES:
 1. "5x200m tempi 25.6-26.1-26.4-26.8-27.0" → 5 SEPARATE sets:
    [
@@ -146,6 +150,16 @@ function dateForWeekday(weekday, reference = new Date()) {
   return formatLocalDate(result);
 }
 
+function buildTextSummary(rawText) {
+  if (!rawText) return '';
+  const firstSentence = rawText
+    .split(/(?<=[\.\!\?])\s+|\n+/)
+    .map(s => s.trim())
+    .find(s => s.length > 0);
+  if (!firstSentence) return rawText.trim().slice(0, 120);
+  return firstSentence.length > 160 ? firstSentence.slice(0, 160) : firstSentence;
+}
+
 function parseExplicitDate(str, reference = new Date()) {
   // Supporta formati tipo 15/01/2026 o 15-01-26
   const m = str.match(/^(\d{1,2})[\/\-](\d{1,2})(?:[\/\-](\d{2,4}))?/);
@@ -230,6 +244,7 @@ function buildProxyRequest(provider, userPrompt) {
 
 async function parseSingleDay({ text, date, titleHint, devApiKey = null }) {
   const provider = 'gemini'; // Solo Gemini
+  const textSummary = buildTextSummary(text);
 
   // Template con esempi concreti di esercizi
   const jsonTemplate = `{
@@ -259,6 +274,8 @@ INSTRUCTIONS:
 4. Convert times: 6"70 → 6.7, 1:30 → 90, 2' → 120s
 5. Group logically: Warmup, Main, Strength, Cooldown, etc
 6. Session type: ONE of [pista, palestra, strada, gara, test, scarico, recupero, altro]
+7. Set session.title as concise summary (4-8 words) of main work
+8. Set session.notes as a short 1-2 sentence summary of the session using user text
 
 Example structure:
 ${jsonTemplate}
@@ -401,7 +418,12 @@ Return ONLY valid JSON. Do not include markdown or explanations.`;
     if (!parsed.groups) parsed.groups = [];
 
     parsed.session.date = date;
-    if (titleHint && !parsed.session.title) parsed.session.title = titleHint;
+    if (!parsed.session.title || !parsed.session.title.trim()) {
+      parsed.session.title = textSummary || titleHint || 'Sessione';
+    }
+    if (!parsed.session.notes || !parsed.session.notes.trim()) {
+      parsed.session.notes = textSummary || parsed.session.notes || null;
+    }
 
     // Valida e ripulisci groups
     parsed.groups = parsed.groups.map(group => ({
