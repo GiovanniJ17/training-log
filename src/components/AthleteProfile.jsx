@@ -22,6 +22,8 @@ export default function AthleteProfile() {
   const [endDate, setEndDate] = useState('');
   const [showOnlyActiveInjuries, setShowOnlyActiveInjuries] = useState(false);
   const [showEditProfile, setShowEditProfile] = useState(false);
+  const [editName, setEditName] = useState('');
+  const [editBirthDate, setEditBirthDate] = useState('');
   const [editWeight, setEditWeight] = useState('');
   const [editHeight, setEditHeight] = useState('');
 
@@ -98,19 +100,23 @@ export default function AthleteProfile() {
   };
 
   const handleEditProfile = () => {
+    setEditName(profile.name || '');
+    setEditBirthDate(profile.birth_date || '');
     setEditWeight(profile.current_weight_kg.toString());
     setEditHeight((profile.height_cm || '').toString());
     setShowEditProfile(true);
   };
 
   const handleSaveProfile = async () => {
-    if (!editWeight || !editHeight) {
+    if (!editName || !editBirthDate || !editWeight || !editHeight) {
       alert('Compila tutti i campi');
       return;
     }
 
     setLoading(true);
     const result = await updateAthleteProfile({
+      name: editName,
+      birth_date: editBirthDate,
       current_weight_kg: parseFloat(editWeight),
       height_cm: parseInt(editHeight),
     });
@@ -621,6 +627,31 @@ export default function AthleteProfile() {
             </div>
 
             <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">
+                  Nome
+                </label>
+                <input
+                  type="text"
+                  value={editName}
+                  onChange={(e) => setEditName(e.target.value)}
+                  className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  placeholder="Mario Rossi"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">
+                  Data di Nascita
+                </label>
+                <input
+                  type="date"
+                  value={editBirthDate}
+                  onChange={(e) => setEditBirthDate(e.target.value)}
+                  className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
+                />
+              </div>
+
               <div>
                 <label className="block text-sm font-medium text-gray-300 mb-2">
                   Peso (kg)
