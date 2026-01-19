@@ -35,25 +35,45 @@ async function callAI(prompt, { json = true } = {}) {
   const workerUrl = getWorkerUrl();
   const requestBody = buildRequest(prompt, { json });
 
-  const response = await fetch(workerUrl, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(requestBody),
-  });
-
-  if (!response.ok) {
-    const err = await response.json().catch(() => ({}));
-    throw new Error(err.error?.message || `Worker error: ${response.status}`);
-  }
-
-  const data = await response.json();
-  const content = data?.choices?.[0]?.message?.content || '';
-  if (!json) return content?.trim();
+  console.log('[aiCoachService] Calling worker at:', workerUrl);
 
   try {
-    return JSON.parse(content);
-  } catch (err) {
-    throw new Error('Risposta AI non valida');
+    const response = await fetch(workerUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(requestBody),
+    });
+
+    if (!response.ok) {
+      const text = await response.text();
+      console.error('[aiCoachService] Worker error response:', response.status, text);
+      throw new Error(`Worker error: ${response.status} - ${text.slice(0, 100)}`);
+    }
+
+    const data = await response.json();
+    console.log('[aiCoachService] Response data:', data);
+    
+    let content = data?.choices?.[0]?.message?.content || '';
+    if (!json) return content?.trim();
+
+    try {
+      // Estrai JSON da markdown code blocks se presente
+      const jsonMatch = content.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+      if (jsonMatch) {
+        content = jsonMatch[1].trim();
+        console.log('[aiCoachService] Extracted JSON from markdown:', content);
+      }
+
+      const parsed = JSON.parse(content);
+      console.log('[aiCoachService] Parsed JSON:', parsed);
+      return parsed;
+    } catch (parseErr) {
+      console.error('[aiCoachService] JSON parse error:', parseErr, 'Content:', content);
+      throw new Error(`JSON parse error: ${parseErr.message}`);
+    }
+  } catch (fetchErr) {
+    console.error('[aiCoachService] Fetch error:', fetchErr.message);
+    throw fetchErr;
   }
 }
 
