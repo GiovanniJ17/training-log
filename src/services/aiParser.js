@@ -243,47 +243,48 @@ ${jsonTemplate}
 
 Return ONLY valid JSON. Do not include markdown or explanations.`;
   
-  // Usa il proxy appropriato in base all'ambiente
-  let proxyUrl = 'http://localhost:5000'; // Default: local dev
+  // TEMPORANEO: Chiamata diretta a Gemini dal browser (solo per testing)
+  // In produzione dovresti usare un proxy per nascondere la chiave API
+  const apiKey = devApiKey && devApiKey.trim().length > 10 
+    ? devApiKey.trim() 
+    : import.meta.env.VITE_GEMINI_API_KEY;
   
-  if (import.meta.env.MODE === 'production') {
-    // In production su Cloudflare Pages, usa il worker standalone
-    proxyUrl = import.meta.env.VITE_WORKER_URL || 'https://training-log-ai-proxy.giovanni-jecha.workers.dev';
+  if (!apiKey) {
+    throw new Error('API key Gemini non configurata. Inseriscila in Modalità Sviluppo.');
   }
+
+  console.log('[AI Parser] Calling Gemini directly from browser');
   
-  // Prepara headers con chiave custom se fornita
-  const headers = { 'Content-Type': 'application/json' };
-  if (devApiKey && devApiKey.trim().length > 10) {
-    headers['X-Custom-API-Key'] = devApiKey.trim();
-    console.log('[AI Parser] Using custom API key:', devApiKey.substring(0, 10) + '...');
-  }
+  const systemPrompt = AI_SYSTEM_PROMPT;
+  const fullPrompt = `${systemPrompt}\n\n${userPrompt}`;
   
-  const requestBody = buildProxyRequest(provider, userPrompt);
-  console.log('[AI Parser] Request to worker:', { 
-    provider, 
-    model: requestBody.model,
-    hasCustomKey: !!headers['X-Custom-API-Key'],
-    hasBodyKey: !!requestBody.apiKey
-  });
-  
-  const response = await fetch(proxyUrl, {
+  const response = await fetch(`https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash:generateContent?key=${apiKey}`, {
     method: 'POST',
-    headers,
-    body: JSON.stringify(requestBody)
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      contents: [{
+        parts: [{ text: fullPrompt }]
+      }],
+      generationConfig: {
+        temperature: 0.1,
+        maxOutputTokens: 8192
+      }
+    })
   });
 
   if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.error?.message || 'Errore API AI');
+    const error = await response.json().catch(() => ({}));
+    throw new Error(error.error?.message || `API error: ${response.status}`);
   }
 
   const data = await response.json();
   let rawContent = '';
 
-  if (data.choices) {
-    rawContent = data.choices[0].message.content;
-  } else if (data.content) {
-    rawContent = data.content[0].text;
+  // Gemini direct API response format
+  if (data.candidates && data.candidates[0]?.content?.parts) {
+    rawContent = data.candidates[0].content.parts[0].text;
   } else {
     rawContent = JSON.stringify(data);
   }
