@@ -124,18 +124,24 @@ export async function getStatsData(startDate = null, endDate = null) {
 }
 
 /**
- * Calcola KPI principali
+ * Calcola KPIs principali con separazione volume pista/sala
  */
 export function calculateKPIs(sessions, raceRecords, strengthRecords, trainingRecords = []) {
   const stats = {
     totalSessions: sessions.length,
     totalVolume: 0,
-    totalDistanceM: 0,
-    totalTonnageKg: 0,
+    totalDistanceM: 0, // Volume pista (metri)
+    totalTonnageKg: 0, // Volume sala (kg)
     avgRPE: 0,
     sessionsByType: {},
     pbCount: (raceRecords.filter(r => r.is_personal_best).length) + (trainingRecords.filter(t => t.is_personal_best).length),
     streak: calculateStreak(sessions),
+    // Nuovi campi separati
+    volumeByCategory: {
+      track: { distance_m: 0, sessions: 0 }, // Pista: solo distanza
+      gym: { tonnage_kg: 0, sessions: 0 },   // Sala: solo tonnellaggio
+      endurance: { distance_m: 0, sessions: 0 }, // Strada: lunghi
+    }
   };
 
   // Calcola volume totale (sessioni con distanza/durata)
@@ -151,25 +157,81 @@ export function calculateKPIs(sessions, raceRecords, strengthRecords, trainingRe
       rpeCount++;
     }
 
-    // Volume: somma distanza e tonnellaggio dai set annidati
+    // Categorizza sessione per volume
+    let sessionCategory = null;
+    if (type === 'pista' || type === 'gara' || type === 'test') {
+      sessionCategory = 'track';
+    } else if (type === 'palestra') {
+      sessionCategory = 'gym';
+    } else if (type === 'strada') {
+      sessionCategory = 'endurance';
+    }
+
+    // Volume: somma distanza e tonnellaggio dai set annidati (SEPARATI)
     (session.workout_groups || []).forEach(group => {
       (group.workout_sets || []).forEach(set => {
         const setCount = set.sets || 1;
         const reps = set.reps || 1;
-        if (set.distance_m) {
-          stats.totalDistanceM += Number(set.distance_m || 0) * setCount;
+        
+        // PISTA: solo sprint/jump (non riscaldamento lungo)
+        if (set.category === 'sprint' || set.category === 'jump') {
+          if (set.distance_m) {
+            const volume = Number(set.distance_m || 0) * setCount;
+            stats.totalDistanceM += volume;
+            if (sessionCategory === 'track') {
+              stats.volumeByCategory.track.distance_m += volume;
+            }
+          }
         }
-        if (set.weight_kg) {
-          stats.totalTonnageKg += Number(set.weight_kg || 0) * setCount * reps;
+        
+        // SALA: solo lift
+        if (set.category === 'lift' && set.weight_kg) {
+          const tonnage = Number(set.weight_kg || 0) * setCount * reps;
+          stats.totalTonnageKg += tonnage;
+          if (sessionCategory === 'gym') {
+            stats.volumeByCategory.gym.tonnage_kg += tonnage;
+          }
+        }
+        
+        // ENDURANCE: solo corsa lunga
+        if (set.category === 'endurance' && set.distance_m) {
+          const volume = Number(set.distance_m || 0) * setCount;
+          stats.totalDistanceM += volume; // Aggiungi al totale generale
+          if (sessionCategory === 'endurance') {
+            stats.volumeByCategory.endurance.distance_m += volume;
+          }
         }
       });
     });
+    
+    // Conta sessioni per categoria
+    if (sessionCategory) {
+      stats.volumeByCategory[sessionCategory].sessions++;
+    }
   });
 
   stats.avgRPE = rpeCount > 0 ? (totalRPE / rpeCount).toFixed(1) : 0;
+  
+  // Mantieni retrocompatibilità
   stats.volume = {
     distance_m: Math.round(stats.totalDistanceM),
     tonnage_kg: Math.round(stats.totalTonnageKg),
+  };
+  
+  // Nuova struttura dettagliata
+  stats.volumeDetailed = {
+    track: {
+      distance_m: Math.round(stats.volumeByCategory.track.distance_m),
+      sessions: stats.volumeByCategory.track.sessions,
+    },
+    gym: {
+      tonnage_kg: Math.round(stats.volumeByCategory.gym.tonnage_kg),
+      sessions: stats.volumeByCategory.gym.sessions,
+    },
+    endurance: {
+      distance_m: Math.round(stats.volumeByCategory.endurance.distance_m),
+      sessions: stats.volumeByCategory.endurance.sessions,
+    }
   };
 
   return stats;

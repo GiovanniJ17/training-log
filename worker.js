@@ -2,43 +2,91 @@
  * Cloudflare Worker - AI Proxy for Training Log
  * Standalone deployment on Cloudflare Workers (not Pages)
  * Route: https://training-log-ai.YOUR_SUBDOMAIN.workers.dev
+ * 
+ * Security Features:
+ * - CORS restricted to production domain
+ * - Rate limiting (100 req/15min per IP)
+ * - API key validation
  */
 
-const CORS_HEADERS = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Custom-API-Key',
-  'Access-Control-Max-Age': '3600'
+// CRITICAL: Change this to your production domain!
+const ALLOWED_ORIGINS = [
+  'http://localhost:5173',
+  'http://localhost:3000',
+  'https://your-app.vercel.app', // TODO: Replace with actual production URL
+];
+
+const RATE_LIMIT = {
+  MAX_REQUESTS: 100,
+  WINDOW_MS: 15 * 60 * 1000, // 15 minutes
 };
+
+function getCorsHeaders(origin) {
+  const allowedOrigin = ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0];
+  return {
+    'Access-Control-Allow-Origin': allowedOrigin,
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Custom-API-Key',
+    'Access-Control-Max-Age': '3600',
+    'Vary': 'Origin'
+  };
+}
 
 export default {
   async fetch(request, env) {
+    const origin = request.headers.get('Origin') || '';
+    const corsHeaders = getCorsHeaders(origin);
+
     // Gestisci CORS preflight
     if (request.method === 'OPTIONS') {
       return new Response(null, {
         status: 204,
-        headers: CORS_HEADERS
+        headers: corsHeaders
       });
+    }
+
+    // Rate Limiting (Simple IP-based)
+    const clientIP = request.headers.get('CF-Connecting-IP') || request.headers.get('X-Forwarded-For') || 'unknown';
+    const rateLimitKey = `ratelimit:${clientIP}`;
+    
+    // Note: This requires a KV namespace bound as 'RATE_LIMIT_KV' in wrangler.toml
+    // If not available, skip rate limiting (will log warning)
+    if (env.RATE_LIMIT_KV) {
+      const { limited, retryAfter } = await checkRateLimit(env.RATE_LIMIT_KV, rateLimitKey);
+      if (limited) {
+        return new Response(JSON.stringify({ 
+          error: { message: 'Troppe richieste. Riprova tra qualche minuto.' } 
+        }), {
+          status: 429,
+          headers: { 
+            ...corsHeaders, 
+            'Content-Type': 'application/json',
+            'Retry-After': retryAfter.toString()
+          }
+        });
+      }
+    } else {
+      console.warn('[Worker] RATE_LIMIT_KV not bound - rate limiting disabled');
     }
 
     // Solo POST requests
     if (request.method !== 'POST') {
       return new Response('Method not allowed', { 
         status: 405,
-        headers: CORS_HEADERS
+        headers: corsHeaders
       });
     }
 
     try {
       const body = await request.json();
-      const { provider, messages, model, apiKey } = body;
+      const { provider, messages, model, apiKey, responseSchema } = body;
 
-      console.log('[Worker] Request received:', { provider, model, hasApiKey: !!apiKey, messagesCount: messages?.length });
+      console.log('[Worker] Request received:', { provider, model, hasApiKey: !!apiKey, hasSchema: !!responseSchema, messagesCount: messages?.length });
 
       if (!provider) {
         return new Response(JSON.stringify({ error: { message: 'Provider è obbligatorio' } }), {
           status: 400,
-          headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' }
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         });
       }
 
@@ -57,33 +105,70 @@ export default {
         if (!geminiKey) {
           return new Response(JSON.stringify({ error: { message: 'Gemini API key non configurata' } }), {
             status: 500,
-            headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' }
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
           });
         }
         console.log('[Worker] Calling Gemini with model:', model || 'gemini-2.5-flash');
-        result = await callGemini(messages, model || 'gemini-2.5-flash', geminiKey);
+        result = await callGemini(messages, model || 'gemini-2.5-flash', geminiKey, responseSchema);
       } else {
         return new Response(JSON.stringify({ error: { message: 'Provider non supportato' } }), {
           status: 400,
-          headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' }
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         });
       }
 
       return new Response(JSON.stringify(result), {
         status: 200,
-        headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' }
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       });
     } catch (error) {
       console.error('Worker error:', error);
       return new Response(JSON.stringify({ error: { message: error.message } }), {
         status: 500,
-        headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' }
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       });
     }
   }
 };
 
-async function callGemini(messages, model, apiKey) {
+/**
+ * Rate limiting using Cloudflare KV
+ */
+async function checkRateLimit(kv, key) {
+  const now = Date.now();
+  const data = await kv.get(key, { type: 'json' });
+  
+  if (!data) {
+    // First request
+    await kv.put(key, JSON.stringify({ count: 1, resetAt: now + RATE_LIMIT.WINDOW_MS }), {
+      expirationTtl: Math.ceil(RATE_LIMIT.WINDOW_MS / 1000)
+    });
+    return { limited: false };
+  }
+  
+  if (now > data.resetAt) {
+    // Window expired, reset
+    await kv.put(key, JSON.stringify({ count: 1, resetAt: now + RATE_LIMIT.WINDOW_MS }), {
+      expirationTtl: Math.ceil(RATE_LIMIT.WINDOW_MS / 1000)
+    });
+    return { limited: false };
+  }
+  
+  if (data.count >= RATE_LIMIT.MAX_REQUESTS) {
+    // Rate limit exceeded
+    const retryAfter = Math.ceil((data.resetAt - now) / 1000);
+    return { limited: true, retryAfter };
+  }
+  
+  // Increment counter
+  await kv.put(key, JSON.stringify({ count: data.count + 1, resetAt: data.resetAt }), {
+    expirationTtl: Math.ceil((data.resetAt - now) / 1000)
+  });
+  
+  return { limited: false };
+}
+
+async function callGemini(messages, model, apiKey, responseSchema = null) {
   // Combina i messaggi in un singolo prompt
   const systemPrompt = messages.find(m => m.role === 'system')?.content || '';
   const userContent = messages.filter(m => m.role === 'user').map(m => m.content).join('\n\n');
@@ -91,20 +176,29 @@ async function callGemini(messages, model, apiKey) {
   
   const url = `https://generativelanguage.googleapis.com/v1/models/${model}:generateContent?key=${apiKey}`;
   
+  // Configurazione base
+  const requestBody = {
+    contents: [{
+      parts: [{ text: fullPrompt }]
+    }],
+    generationConfig: {
+      temperature: 0.1,
+      maxOutputTokens: 8192
+    }
+  };
+  
+  // Se fornito uno schema, usa Structured Output (JSON mode nativo)
+  if (responseSchema) {
+    requestBody.generationConfig.responseMimeType = 'application/json';
+    requestBody.generationConfig.responseSchema = responseSchema;
+  }
+  
   const response = await fetch(url, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json'
     },
-    body: JSON.stringify({
-      contents: [{
-        parts: [{ text: fullPrompt }]
-      }],
-      generationConfig: {
-        temperature: 0.1,
-        maxOutputTokens: 8192
-      }
-    })
+    body: JSON.stringify(requestBody)
   });
 
   const data = await response.json();

@@ -2,9 +2,30 @@
  * AI Training Parser Service
  * Converte descrizioni di allenamento in linguaggio naturale in dati strutturati
  * Supporta input con più giorni nello stesso testo e data automatica per ogni giorno
+ * 
+ * Features:
+ * - Context-aware: conosce PB attuali, infortuni, pattern ricorrenti
+ * - Anomaly detection: rileva dati sospetti (tempi impossibili, pesi anomali)
+ * - Structured output: usa JSON schema nativo di Gemini
  */
 
+import { getAthleteContext, detectAnomalies } from './contextService.js';
+import { TRAINING_SESSION_SCHEMA, buildSchemaRequest } from './aiSchema.js';
+
 const AI_SYSTEM_PROMPT = `You are an expert Italian training data parser. Extract training data with EXTREME PRECISION.
+
+EXERCISE NORMALIZATION (AI-based mapping):
+- Normalize exercise names to STANDARD forms (prefer English names for consistency)
+- Examples:
+  * "Squat", "Back Squat", "Squat completo" → "Squat"
+  * "Panca piana", "Bench press", "Distensioni" → "Bench Press"
+  * "Stacco", "Deadlift", "Stacco da terra" → "Deadlift"
+  * "Girata", "Power Clean", "Clean" → "Power Clean"
+  * "Slancio", "Jerk", "Push Jerk" → "Jerk"
+  * "Sprint 100m", "100 metri", "Cento" → "Sprint 100m"
+  * "Squat bulgaro", "Bulgarian Split Squat" → "Bulgarian Split Squat"
+- Map variations to the closest standard exercise
+- If exercise is unique/specific, keep descriptive name but standardize format
 
 CRITICAL RULES:
 1. MULTIPLE TIMES: If user lists times like "42-43-44-44-45", create SEPARATE sets for EACH time
@@ -394,10 +415,13 @@ function buildProxyRequest(provider, userPrompt) {
   };
 }
 
-async function parseSingleDay({ text, date, titleHint, devApiKey = null }) {
+async function parseSingleDay({ text, date, titleHint, devApiKey = null, athleteContext = null }) {
   try {
     const provider = 'gemini'; // Solo Gemini
     const textSummary = buildTextSummary(text);
+    
+    // Ottieni contesto atleta se non fornito (RAG pattern)
+    const context = athleteContext || await getAthleteContext();
 
     // Template con esempi concreti di esercizi
     const jsonTemplate = `{
@@ -412,7 +436,9 @@ async function parseSingleDay({ text, date, titleHint, devApiKey = null }) {
   ]
 }`;
 
-  const userPrompt = `Extract training data and return ONLY valid JSON.
+  const userPrompt = `${context}
+
+Extract training data and return ONLY valid JSON.
 
 Date: ${date}
 Title: ${titleHint}
@@ -434,19 +460,29 @@ INSTRUCTIONS:
 Example structure:
 ${jsonTemplate}
 
-Return ONLY valid JSON. Do not include markdown or explanations.`;
+Return ONLY valid JSON. Do not include markdown or explanations.
+
+AMBIGUITIES: If you are uncertain about a value (e.g., "rec 3" could be 3 seconds or 3 minutes), add a question to the "questions_for_user" array.
+ANOMALIES: If a value seems impossible or unusual (e.g., 100m in 9s), add a warning to the "warnings" array.`;
   
-  // Usa il worker proxy per nascondere la chiave API (SICURO)
+  // Usa il worker proxy con schema strutturato (eliminaREGEX parsing!)
+  const requestBody = buildSchemaRequest('gemini', [
+    { role: 'system', content: AI_SYSTEM_PROMPT },
+    { role: 'user', content: userPrompt }
+  ], TRAINING_SESSION_SCHEMA);
+  
+  // Dev mode: aggiungi API key custom se fornita
+  if (devApiKey && import.meta.env.MODE !== 'production') {
+    requestBody.apiKey = devApiKey;
+  }
+  
+  // Worker URL
   let workerUrl = 'http://localhost:5000'; // Local dev
-  
   if (import.meta.env.MODE === 'production') {
-    // Production: usa il worker Cloudflare
     workerUrl = import.meta.env.VITE_WORKER_URL || 'https://training-log-ai-proxy.giovanni-jecha.workers.dev';
   }
   
   const headers = { 'Content-Type': 'application/json' };
-  const requestBody = buildProxyRequest('gemini', userPrompt);
-  // Calling worker
   
   const response = await fetch(workerUrl, {
     method: 'POST',
