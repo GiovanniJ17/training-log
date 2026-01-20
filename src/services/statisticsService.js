@@ -20,12 +20,6 @@ export async function getStatsData(startDate = null, endDate = null) {
     const end = new Date(rawEnd);
     const start = startDate || new Date(rawEnd.getTime() - 90 * 24 * 60 * 60 * 1000);
 
-    // Range: {
-      start: start.toISOString(),
-      end: end.toISOString(),
-      rawEnd: rawEnd.toISOString(),
-    });
-
     const { data: sessionsData, error: sessionsError } = await supabase
       .from('training_sessions')
       .select(`
@@ -112,12 +106,6 @@ export async function getStatsData(startDate = null, endDate = null) {
       });
     });
 
-    // Counts: {
-      sessions: sessions.length,
-      raceRecords: raceRecords.length,
-      strengthRecords: strengthRecords.length,
-      injuries: (injuriesData || []).length,
-    });
 
     return {
       success: true,
