@@ -524,6 +524,7 @@ ANOMALIES: If a value seems impossible or unusual (e.g., 100m in 9s), add a warn
   console.log('[Parser] Fetch response received, status:', response.status);
 
   if (!response.ok) {
+    clearTimeout(timeoutId); // Clear timeout immediately on error
     const error = await response.json().catch(() => ({}));
     console.error('[Parser] Worker error response:', error);
     throw new Error(error.error?.message || `Worker error: ${response.status}`);

@@ -195,12 +195,16 @@ async function checkRateLimit(kv, key) {
 }
 
 async function callGemini(messages, model, apiKey, responseSchema = null) {
+  console.log('[Worker] callGemini started, model:', model, 'responseSchema:', !!responseSchema);
+  
   // Combina i messaggi in un singolo prompt
   const systemPrompt = messages.find(m => m.role === 'system')?.content || '';
   const userContent = messages.filter(m => m.role === 'user').map(m => m.content).join('\n\n');
   const fullPrompt = systemPrompt ? `${systemPrompt}\n\n${userContent}` : userContent;
   
-  const url = `https://generativelanguage.googleapis.com/v1/models/${model}:generateContent?key=${apiKey}`;
+  console.log('[Worker] Full prompt length:', fullPrompt.length);
+  
+  const url = `https://generativelanguage.googleapis.com/v1/models/${model}:generateContent?key=${apiKey.substring(0,10)}...`;
   
   // Configurazione base
   const requestBody = {
@@ -215,9 +219,18 @@ async function callGemini(messages, model, apiKey, responseSchema = null) {
   
   // Se fornito uno schema, usa Structured Output (JSON mode nativo)
   if (responseSchema) {
+    console.log('[Worker] Adding responseSchema to request');
     requestBody.generationConfig.responseMimeType = 'application/json';
     requestBody.generationConfig.responseSchema = responseSchema;
+  } else {
+    console.log('[Worker] No responseSchema, using plain text mode');
   }
+  
+  console.log('[Worker] Sending request to Gemini:', {
+    url: url,
+    bodySize: JSON.stringify(requestBody).length,
+    hasSchema: !!responseSchema
+  });
   
   const response = await fetch(url, {
     method: 'POST',
@@ -227,23 +240,31 @@ async function callGemini(messages, model, apiKey, responseSchema = null) {
     body: JSON.stringify(requestBody)
   });
 
+  console.log('[Worker] Gemini response status:', response.status);
+  
   const data = await response.json();
+  console.log('[Worker] Gemini response data keys:', Object.keys(data));
 
   if (!response.ok) {
+    console.error('[Worker] Gemini API error:', data);
     throw new Error(data.error?.message || `Gemini API error: ${response.statusText}`);
   }
 
   // Estrai il testo dalla risposta di Gemini
   const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+  console.log('[Worker] Extracted text length:', text.length, 'first 100 chars:', text.substring(0, 100));
   
   // Trasforma in formato compatibile (OpenAI-like)
-  return {
+  const result = {
     choices: [{
       message: {
         content: text
       }
     }]
   };
+  
+  console.log('[Worker] Returning result, choices count:', result.choices.length);
+  return result;
 }
 
 async function callOpenAI(messages, model, apiKey) {
