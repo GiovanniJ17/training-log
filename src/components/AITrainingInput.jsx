@@ -44,8 +44,11 @@ export default function AITrainingInput({ onDataSaved }) {
     setAmbiguityQuestions(null);
     setWarnings([]);
 
+    console.log('[AITrainingInput] Starting parse with text:', trainingText.substring(0, 100));
+
     try {
       const parsed = await parseTrainingWithAI(trainingText, new Date());
+      console.log('[AITrainingInput] Parse result:', parsed);
 
         // Estrai questions e warnings dall'AI
       const questionsFromAI = parsed.questions_for_user || [];
@@ -75,6 +78,7 @@ export default function AITrainingInput({ onDataSaved }) {
 
       setParsedData(parsed);
     } catch (err) {
+      console.error('[AITrainingInput] Parse error:', err);
       setError(friendlyErrorMessage(err.message));
     } finally {
       setLoading(false);

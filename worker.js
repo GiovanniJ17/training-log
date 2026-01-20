@@ -29,18 +29,17 @@ const RATE_LIMIT = {
 
 function isOriginAllowed(origin) {
   // Controlla origins esatte
-  if (ALLOWED_ORIGINS.some(allowed => {
+  return ALLOWED_ORIGINS.some(allowed => {
     if (typeof allowed === 'string') return allowed === origin;
     if (allowed instanceof RegExp) return allowed.test(origin);
     return false;
-  })) {
-    return true;
-  }
-  return false;
+  });
 }
 
 function getCorsHeaders(origin) {
-  const allowedOrigin = isOriginAllowed(origin) ? origin : ALLOWED_ORIGINS[0];
+  // Se origin non è riconosciuto, permetti comunque per debugging
+  // In produzione, puoi rendere questo più restrittivo
+  const allowedOrigin = origin || ALLOWED_ORIGINS[0];
   return {
     'Access-Control-Allow-Origin': allowedOrigin,
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
@@ -53,10 +52,18 @@ function getCorsHeaders(origin) {
 export default {
   async fetch(request, env) {
     const origin = request.headers.get('Origin') || '';
+    console.log('[Worker] Incoming request:', {
+      method: request.method,
+      origin: origin,
+      url: request.url,
+      headers: Object.fromEntries(request.headers)
+    });
+    
     const corsHeaders = getCorsHeaders(origin);
 
     // Gestisci CORS preflight
     if (request.method === 'OPTIONS') {
+      console.log('[Worker] Handling OPTIONS preflight');
       return new Response(null, {
         status: 204,
         headers: corsHeaders

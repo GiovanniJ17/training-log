@@ -430,6 +430,7 @@ function buildProxyRequest(provider, userPrompt) {
 
 async function parseSingleDay({ text, date, titleHint, devApiKey = null, athleteContext = null }) {
   try {
+    console.log('[parseSingleDay] Starting parse for date:', date, 'text length:', text.length);
     const provider = 'gemini'; // Solo Gemini
     const textSummary = buildTextSummary(text);
     
@@ -503,12 +504,16 @@ ANOMALIES: If a value seems impossible or unusual (e.g., 100m in 9s), add a warn
   
   const headers = { 'Content-Type': 'application/json' };
   
+  console.log('[Parser] About to fetch from:', workerUrl);
+  console.log('[Parser] Request body size:', JSON.stringify(requestBody).length, 'bytes');
+
   // Implementa timeout di sicurezza (15 secondi max)
   const controller = new AbortController();
   let timeoutId; // Dichiara prima del try per accesso nel catch
   
   timeoutId = setTimeout(() => controller.abort(), 15000);
 
+  console.log('[Parser] Sending fetch request...');
   const response = await fetch(workerUrl, {
     method: 'POST',
     headers,
@@ -516,58 +521,74 @@ ANOMALIES: If a value seems impossible or unusual (e.g., 100m in 9s), add a warn
     signal: controller.signal
   });
 
+  console.log('[Parser] Fetch response received, status:', response.status);
+
   if (!response.ok) {
     const error = await response.json().catch(() => ({}));
+    console.error('[Parser] Worker error response:', error);
     throw new Error(error.error?.message || `Worker error: ${response.status}`);
   }
 
   const data = await response.json();
+  console.log('[Parser] Response data received, keys:', Object.keys(data));
   clearTimeout(timeoutId); // Cancella il timeout se completato con successo
   let rawContent = '';
 
   // Worker ritorna il formato OpenAI-compatible
   if (data.choices && data.choices[0]?.message?.content) {
     rawContent = data.choices[0].message.content;
+    console.log('[Parser] Extracted content from choices[0].message.content, length:', rawContent.length);
   } else if (data.error) {
+    console.error('[Parser] Data contains error:', data.error);
     throw new Error(data.error.message || 'Worker error');
   } else {
     rawContent = JSON.stringify(data);
+    console.log('[Parser] No choices found, using raw data');
   }
 
   // Estratto JSON dal response
   let jsonStr = rawContent.trim();
+  console.log('[Parser] JSON string after trim, length:', jsonStr.length, 'first 100 chars:', jsonStr.substring(0, 100));
   
   // Con JSON Mode di Gemini, dovrebbe essere già JSON puro
   // Ma manteniamo fallback per markdown code blocks (compatibilità)
   if (jsonStr.startsWith('```')) {
     const match = jsonStr.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
-    if (match) jsonStr = match[1];
+    if (match) {
+      jsonStr = match[1];
+      console.log('[Parser] Extracted JSON from code block');
+    }
   }
 
   // Sanitizza il JSON prima del parsing (rimuove testo extra prima/dopo)
   jsonStr = sanitizeJsonResponse(jsonStr);
+  console.log('[Parser] After sanitization, length:', jsonStr.length);
 
   // JSON Mode di Gemini ritorna JSON direttamente, parsing diretto
   let parsed;
   try {
     parsed = JSON.parse(jsonStr);
+    console.log('[Parser] JSON parsing successful, parsed keys:', Object.keys(parsed));
     // JSON Mode parsing successful
   } catch (e) {
-    console.warn(`[parseSingleDay] Direct JSON parsing failed, trying to extract JSON object...`);
+    console.warn(`[Parser] Direct JSON parsing failed:`, e.message);
+    console.warn(`[Parser] Attempting fallback extraction...`);
     
     // Fallback: estrai oggetto JSON se c'è testo extra
     const jsonMatch = jsonStr.match(/\{[\s\S]*\}/);
     if (!jsonMatch) {
-      console.error('[parseSingleDay] No JSON object found');
+      console.error('[Parser] No JSON object found in response');
       throw new Error('Risposta AI non contiene JSON');
     }
 
     jsonStr = jsonMatch[0];
+    console.log('[Parser] Extracted JSON object, length:', jsonStr.length);
     
     try {
       parsed = JSON.parse(jsonStr);
+      console.log('[Parser] Fallback JSON parsing successful');
     } catch (e2) {
-      console.warn(`[parseSingleDay] Second parse attempt failed, using minimal structure...`);
+      console.warn(`[Parser] Second parse attempt failed, using minimal structure...`);
       // Fallback: struttura minima
       parsed = {
         session: { date, title: 'Session', type: 'altro', rpe: null, feeling: null, notes: null },
@@ -606,6 +627,14 @@ ANOMALIES: If a value seems impossible or unusual (e.g., 100m in 9s), add a warn
     parsed.session.notes = textSummary || parsed.session.notes || null;
   }
 
+  console.log('[Parser] Session structured:', {
+    date: parsed.session.date,
+    title: parsed.session.title,
+    groups: parsed.groups.length,
+    questions: parsed.questions_for_user?.length || 0,
+    warnings: parsed.warnings?.length || 0
+  });
+
   // Valida e ripulisci groups
   parsed.groups = parsed.groups.map(group => ({
     ...group,
@@ -626,6 +655,8 @@ ANOMALIES: If a value seems impossible or unusual (e.g., 100m in 9s), add a warn
   }))
   .filter(group => group.sets && group.sets.length > 0);
 
+  console.log('[Parser] After validation, groups:', parsed.groups.length);
+
   // Valida type
   const validTypes = ['pista', 'palestra', 'strada', 'gara', 'test', 'scarico', 'recupero', 'altro'];
   if (parsed.session.type && !validTypes.includes(parsed.session.type.toLowerCase())) {
@@ -638,10 +669,11 @@ ANOMALIES: If a value seems impossible or unusual (e.g., 100m in 9s), add a warn
     
     // Gestisci errore di timeout specificamente
     if (e.name === 'AbortError') {
-      console.error('[parseSingleDay] Timeout error - request took too long (>15s)');
+      console.error('[Parser] ❌ Timeout error - request took too long (>15s)');
       throw new Error('La richiesta ha impiegato troppo tempo. Controlla la tua connessione e riprova.');
     }
-    console.error(`[parseSingleDay] Final error: ${e.message}`);
+    console.error(`[Parser] ❌ Final error for date ${date}:`, e.message);
+    console.error('[Parser] Error stack:', e.stack);
     throw new Error(`Parsing ${date}: ${e.message}`);
   }
 }
