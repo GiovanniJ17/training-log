@@ -276,20 +276,68 @@ export async function resolveInjury(injuryId, endDate) {
 }
 
 /**
- * Recupera PB personali (i migliori di ogni categoria)
+ * Recupera PB personali dalle tabelle dedicate (ottimizzato)
+ * 
+ * Legge direttamente dalle tabelle race_records, strength_records, training_records
+ * invece di ricalcolare scansionando i workout_sets.
+ * 
+ * Vantaggi:
+ * - Molto più veloce (legge da tabelle con indici)
+ * - Preciso (usa i dati ufficiali con flag is_personal_best)
+ * - Mantiene separazione tra record ufficiali e allenamenti
  */
 export async function getPersonalBests() {
   try {
-    // Nuova implementazione: recupera i PB reali da workout_sets
-    return await getPersonalBestsFromWorkoutSets();
+    console.log('[athleteService] Recuperando PB dalle tabelle dedicate...');
+    
+    // Leggi dai tre record type in parallelo
+    const [raceResult, trainingResult, strengthResult] = await Promise.all([
+      getRaceRecords(),
+      getTrainingRecords(),
+      getStrengthRecords()
+    ]);
+
+    if (!raceResult.success || !trainingResult.success || !strengthResult.success) {
+      throw new Error('Errore nel recupero uno o più tipi di PB');
+    }
+
+    // Filtra solo i record con is_personal_best = true
+    const raceRecords = (raceResult.data || []).filter(r => r.is_personal_best);
+    const trainingRecords = (trainingResult.data || []).filter(t => t.is_personal_best);
+    const strengthRecords = (strengthResult.data || []).filter(s => s.is_personal_best);
+
+    console.log('[athleteService] PB trovati:', {
+      race: raceRecords.length,
+      training: trainingRecords.length,
+      strength: strengthRecords.length,
+    });
+
+    return {
+      success: true,
+      data: {
+        raceRecords,
+        trainingRecords,
+        strengthRecords,
+      },
+    };
   } catch (error) {
     console.error('Errore nel recupero PB personali:', error);
-    return { success: false, error: error.message };
+    // Fallback: tenta il metodo legacy se c'è un errore
+    console.warn('[athleteService] Fallback a getPersonalBestsFromWorkoutSets()');
+    return await getPersonalBestsFromWorkoutSets();
   }
 }
 
 /**
- * Recupera i Personal Best reali analizzando workout_sets
+ * Recupera i Personal Best analizzando workout_sets (LEGACY)
+ * 
+ * DEPRECATO: Usato solo come fallback in getPersonalBests() se fallisce la lettura
+ * dalle tabelle dedicate.
+ * 
+ * Questo metodo è lento perché scansiona TUTTI i workout_sets e ricalcola i PB al volo.
+ * Preferibilmente usa getPersonalBests() che legge dalle tabelle dedicate.
+ * 
+ * Manteniamo questa funzione come fallback per compatibilità.
  */
 export async function getPersonalBestsFromWorkoutSets() {
   try {
