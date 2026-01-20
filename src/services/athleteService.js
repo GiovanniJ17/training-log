@@ -70,30 +70,13 @@ export async function getRaceRecords() {
 
 /**
  * Aggiungi un record di gara
+ * NOTA: I dati vengono già inseriti tramite insert_full_training_session.
+ * Questa funzione è mantenuta per compatibilità ma non fa inserimenti.
  */
 export async function addRaceRecord(sessionId, raceData) {
-  try {
-    const { data, error } = await supabase
-      .from('race_records')
-      .insert([{
-        session_id: sessionId,
-        distance_m: raceData.distance_m,
-        time_s: raceData.time_s,
-        rpe: raceData.rpe || null,
-        location: raceData.location || null,
-        competition_name: raceData.competition_name || null,
-        notes: raceData.notes || null,
-        is_personal_best: raceData.is_personal_best || false,
-      }])
-      .select()
-      .single();
-
-    if (error) throw error;
-    return { success: true, data };
-  } catch (error) {
-    console.error('Errore nell\'aggiunta race record:', error);
-    return { success: false, error: error.message };
-  }
+  // I record vengono già inseriti automaticamente in workout_sets
+  // tramite insert_full_training_session e la vista race_records li mostra
+  return { success: true, data: { session_id: sessionId, ...raceData } };
 }
 
 /**
@@ -116,30 +99,13 @@ export async function getTrainingRecords() {
 
 /**
  * Aggiungi un record di allenamento
+ * NOTA: I dati vengono già inseriti tramite insert_full_training_session.
+ * Questa funzione è mantenuta per compatibilità ma non fa inserimenti.
  */
 export async function addTrainingRecord(sessionId, trainingData) {
-  try {
-    const { data, error } = await supabase
-      .from('training_records')
-      .insert([{
-        session_id: sessionId,
-        exercise_name: trainingData.exercise_name,
-        exercise_type: trainingData.exercise_type, // 'sprint', 'jump', 'throw', 'endurance'
-        performance_value: trainingData.performance_value,
-        performance_unit: trainingData.performance_unit, // 'seconds', 'meters', 'reps', 'kg'
-        rpe: trainingData.rpe || null,
-        notes: trainingData.notes || null,
-        is_personal_best: trainingData.is_personal_best || false,
-      }])
-      .select()
-      .single();
-
-    if (error) throw error;
-    return { success: true, data };
-  } catch (error) {
-    console.error('Errore nell\'aggiunta training record:', error);
-    return { success: false, error: error.message };
-  }
+  // I record vengono già inseriti automaticamente in workout_sets
+  // tramite insert_full_training_session e la vista training_records li mostra
+  return { success: true, data: { session_id: sessionId, ...trainingData } };
 }
 
 /**
@@ -182,29 +148,13 @@ export async function getStrengthRecordsByCategory(category) {
 
 /**
  * Aggiungi un massimale di forza
+ * NOTA: I dati vengono già inseriti tramite insert_full_training_session.
+ * Questa funzione è mantenuta per compatibilità ma non fa inserimenti.
  */
 export async function addStrengthRecord(sessionId, strengthData) {
-  try {
-    const { data, error } = await supabase
-      .from('strength_records')
-      .insert([{
-        session_id: sessionId,
-        exercise_name: strengthData.exercise_name,
-        category: strengthData.category,
-        weight_kg: strengthData.weight_kg,
-        reps: strengthData.reps || 1,
-        notes: strengthData.notes || null,
-        is_personal_best: strengthData.is_personal_best || false,
-      }])
-      .select()
-      .single();
-
-    if (error) throw error;
-    return { success: true, data };
-  } catch (error) {
-    console.error('Errore nell\'aggiunta strength record:', error);
-    return { success: false, error: error.message };
-  }
+  // I record vengono già inseriti automaticamente in workout_sets
+  // tramite insert_full_training_session e la vista strength_records li mostra
+  return { success: true, data: { session_id: sessionId, ...strengthData } };
 }
 
 /**

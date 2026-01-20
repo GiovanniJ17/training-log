@@ -4,7 +4,10 @@
 
 -- 1. PULIZIA INTELLIGENTE (Smart Reset)
 -- Gestisce automaticamente conflitti tra Tabelle e Viste
-SET session_replication_role = 'replica';
+
+-- Prima rimuovi tutte le funzioni (non dipendono dalle tabelle)
+DROP FUNCTION IF EXISTS public.check_and_mark_personal_best() CASCADE;
+DROP FUNCTION IF EXISTS public.insert_full_training_session(date, text, text, text, integer, text, text, jsonb) CASCADE;
 
 DO $$ 
 DECLARE
@@ -26,7 +29,7 @@ BEGIN
     END LOOP;
 END $$;
 
--- Rimuove il resto (ordine sicuro con CASCADE)
+-- Rimuove il resto (ordine sicuro con CASCADE che include trigger e policy automaticamente)
 DROP VIEW IF EXISTS public.view_race_records CASCADE;
 DROP VIEW IF EXISTS public.view_strength_records CASCADE;
 DROP VIEW IF EXISTS public.view_training_records CASCADE;
@@ -36,10 +39,6 @@ DROP TABLE IF EXISTS public.workout_groups CASCADE;
 DROP TABLE IF EXISTS public.training_sessions CASCADE;
 DROP TABLE IF EXISTS public.monthly_stats CASCADE;
 DROP TABLE IF EXISTS public.athlete_profile CASCADE;
-DROP TRIGGER IF EXISTS trigger_auto_mark_pb ON public.workout_sets;
-DROP FUNCTION IF EXISTS public.check_and_mark_personal_best();
-
-SET session_replication_role = 'origin';
 
 
 -- 2. CREAZIONE STRUTTURA DATI (Core Tables)
@@ -175,60 +174,37 @@ WHERE ws.is_personal_best = true AND ws.is_race = false;
 
 CREATE OR REPLACE FUNCTION public.check_and_mark_personal_best()
 RETURNS TRIGGER AS $$
+DECLARE
+  v_is_pb boolean := false;
 BEGIN
-  -- Se siamo in modalità replica, non eseguire la logica
-  -- (evita loop infinito durante gli UPDATE interni)
-  IF session_replication_role = 'replica' THEN
-    RETURN NEW;
-  END IF;
-
   -- Logica SPRINT
   IF NEW.category = 'sprint' AND NEW.time_s > 0 THEN
-    IF NOT EXISTS (
+    -- Verifica se questo è il miglior tempo per questa distanza
+    SELECT NOT EXISTS (
       SELECT 1 FROM public.workout_sets ws
-      JOIN public.workout_groups wg ON ws.group_id = wg.id
       WHERE ws.category = 'sprint' 
       AND ws.distance_m = NEW.distance_m 
       AND ws.time_s < NEW.time_s
       AND ws.id != NEW.id
-    ) THEN
-       NEW.is_personal_best := true;
-       
-       -- Disabilita i trigger durante l'UPDATE interno
-       SET session_replication_role = 'replica';
-       UPDATE public.workout_sets SET is_personal_best = false 
-       WHERE distance_m = NEW.distance_m AND category = 'sprint' AND id != NEW.id;
-       SET session_replication_role = 'origin';
-    ELSE
-      NEW.is_personal_best := false;
-    END IF;
-  END IF;
-
+    ) INTO v_is_pb;
+    
+    NEW.is_personal_best := v_is_pb;
+  
   -- Logica FORZA
-  IF NEW.category = 'lift' AND NEW.weight_kg > 0 THEN
-    IF NOT EXISTS (
+  ELSIF NEW.category = 'lift' AND NEW.weight_kg > 0 THEN
+    -- Verifica se questo è il massimale per questo esercizio
+    SELECT NOT EXISTS (
       SELECT 1 FROM public.workout_sets ws
       WHERE ws.category = 'lift'
       AND LOWER(ws.exercise_name) = LOWER(NEW.exercise_name)
       AND ws.weight_kg > NEW.weight_kg
       AND ws.id != NEW.id
-    ) THEN
-       NEW.is_personal_best := true;
-       
-       -- Disabilita i trigger durante l'UPDATE interno
-       SET session_replication_role = 'replica';
-       UPDATE public.workout_sets SET is_personal_best = false 
-       WHERE LOWER(exercise_name) = LOWER(NEW.exercise_name) AND category = 'lift' AND id != NEW.id;
-       SET session_replication_role = 'origin';
-    ELSE
-      NEW.is_personal_best := false;
-    END IF;
-  END IF;
-
-  -- Se non è sprint o lift, assicurati che is_personal_best sia false
-  IF (NEW.category != 'sprint' AND NEW.category != 'lift') OR 
-     (NEW.category = 'sprint' AND NEW.time_s <= 0) OR
-     (NEW.category = 'lift' AND NEW.weight_kg <= 0) THEN
+    ) INTO v_is_pb;
+    
+    NEW.is_personal_best := v_is_pb;
+  
+  ELSE
+    -- Se non è sprint o lift, assicurati che is_personal_best sia false
     NEW.is_personal_best := false;
   END IF;
 
@@ -244,8 +220,7 @@ CREATE TRIGGER trigger_auto_mark_pb
 
 -- 4b. FUNZIONE RPC PER INSERIMENTO ATOMICO (Training Session)
 -- =================================================================
--- Questa funzione ha SECURITY DEFINER per poter usare SET session_replication_role
--- SET LOCAL disabilita i trigger solo per questa transazione (sicuro e efficiente)
+-- Questa funzione inserisce una sessione completa con tutti i suoi gruppi e set
 
 CREATE OR REPLACE FUNCTION public.insert_full_training_session(
   p_date date,
@@ -259,17 +234,13 @@ CREATE OR REPLACE FUNCTION public.insert_full_training_session(
 )
 RETURNS uuid
 LANGUAGE plpgsql
-SECURITY DEFINER
 AS $$
 DECLARE
   v_session_id uuid;
   v_group jsonb;
   v_set jsonb;
+  v_group_id uuid;
 BEGIN
-  -- IMPORTANTE: Disabilita i trigger SOLO per questa transazione
-  -- Evita il loop infinito nel trigger check_and_mark_personal_best
-  SET LOCAL session_replication_role = 'replica';
-
   -- 1. Inserisci la sessione di allenamento
   INSERT INTO public.training_sessions (
     date, title, type, location, rpe, feeling, notes
@@ -281,47 +252,41 @@ BEGIN
   -- 2. Itera sui gruppi e inserisci sets
   FOR v_group IN SELECT jsonb_array_elements(p_groups)
   LOOP
-    DECLARE
-      v_group_id uuid;
-    BEGIN
-      -- Inserisci il gruppo di workout
-      INSERT INTO public.workout_groups (
-        session_id, order_index, name, notes
-      ) VALUES (
-        v_session_id,
-        (v_group->>'order_index')::integer,
-        v_group->>'name',
-        v_group->>'notes'
-      )
-      RETURNING id INTO v_group_id;
+    -- Inserisci il gruppo di workout
+    INSERT INTO public.workout_groups (
+      session_id, order_index, name, notes
+    ) VALUES (
+      v_session_id,
+      (v_group->>'order_index')::integer,
+      v_group->>'name',
+      v_group->>'notes'
+    )
+    RETURNING id INTO v_group_id;
 
-      -- Inserisci tutti i sets di questo gruppo
-      FOR v_set IN SELECT jsonb_array_elements(v_group->'sets')
-      LOOP
-        INSERT INTO public.workout_sets (
-          group_id, exercise_name, category, sets, reps, 
-          weight_kg, distance_m, time_s, recovery_s, notes
-        ) VALUES (
-          v_group_id,
-          v_set->>'exercise_name',
-          v_set->>'category',
-          (v_set->>'sets')::integer,
-          (v_set->>'reps')::integer,
-          CASE WHEN v_set->>'weight_kg' IS NOT NULL AND v_set->>'weight_kg' != '' 
-               THEN (v_set->>'weight_kg')::numeric ELSE NULL END,
-          CASE WHEN v_set->>'distance_m' IS NOT NULL AND v_set->>'distance_m' != '' 
-               THEN (v_set->>'distance_m')::numeric ELSE NULL END,
-          CASE WHEN v_set->>'time_s' IS NOT NULL AND v_set->>'time_s' != '' 
-               THEN (v_set->>'time_s')::numeric ELSE NULL END,
-          (v_set->>'recovery_s')::integer,
-          v_set->>'notes'
-        );
-      END LOOP;
-    END;
+    -- Inserisci tutti i sets di questo gruppo
+    FOR v_set IN SELECT jsonb_array_elements(v_group->'sets')
+    LOOP
+      INSERT INTO public.workout_sets (
+        group_id, exercise_name, category, sets, reps, 
+        weight_kg, distance_m, time_s, recovery_s, notes
+      ) VALUES (
+        v_group_id,
+        v_set->>'exercise_name',
+        v_set->>'category',
+        (v_set->>'sets')::integer,
+        (v_set->>'reps')::integer,
+        CASE WHEN v_set->>'weight_kg' IS NOT NULL AND v_set->>'weight_kg' != '' 
+             THEN (v_set->>'weight_kg')::numeric ELSE NULL END,
+        CASE WHEN v_set->>'distance_m' IS NOT NULL AND v_set->>'distance_m' != '' 
+             THEN (v_set->>'distance_m')::numeric ELSE NULL END,
+        CASE WHEN v_set->>'time_s' IS NOT NULL AND v_set->>'time_s' != '' 
+             THEN (v_set->>'time_s')::numeric ELSE NULL END,
+        (v_set->>'recovery_s')::integer,
+        v_set->>'notes'
+      );
+    END LOOP;
   END LOOP;
 
-  -- Al termine della funzione, session_replication_role torna automaticamente a 'origin'
-  -- (grazie a SET LOCAL che è limitato alla transazione)
   RETURN v_session_id;
 END;
 $$;
@@ -337,12 +302,14 @@ ALTER TABLE public.athlete_profile ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.training_sessions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.workout_groups ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.workout_sets ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.injury_history ENABLE ROW LEVEL SECURITY;
 
 -- Policy Aperta per Sviluppo (Da restringere in produzione con auth.uid())
 CREATE POLICY "Public Access" ON public.athlete_profile FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Public Access" ON public.training_sessions FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Public Access" ON public.workout_groups FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Public Access" ON public.workout_sets FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Public Access" ON public.injury_history FOR ALL USING (true) WITH CHECK (true);
 
 GRANT ALL ON ALL TABLES IN SCHEMA public TO postgres, service_role;
 GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO postgres, service_role;
