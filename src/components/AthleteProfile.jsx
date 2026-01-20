@@ -320,7 +320,8 @@ export default function AthleteProfile() {
                           </div>
                         </div>
                       </div>
-                    ))}\n                </div>
+                    ))}
+                </div>
               </div>
             )}
           </div>
