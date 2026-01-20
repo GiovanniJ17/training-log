@@ -242,6 +242,95 @@ CREATE TRIGGER trigger_auto_mark_pb
   EXECUTE FUNCTION public.check_and_mark_personal_best();
 
 
+-- 4b. FUNZIONE RPC PER INSERIMENTO ATOMICO (Training Session)
+-- =================================================================
+-- Questa funzione ha SECURITY DEFINER per poter usare SET session_replication_role
+-- SET LOCAL disabilita i trigger solo per questa transazione (sicuro e efficiente)
+
+CREATE OR REPLACE FUNCTION public.insert_full_training_session(
+  p_date date,
+  p_title text,
+  p_type text,
+  p_location text,
+  p_rpe integer,
+  p_feeling text,
+  p_notes text,
+  p_groups jsonb
+)
+RETURNS uuid
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+  v_session_id uuid;
+  v_group jsonb;
+  v_set jsonb;
+BEGIN
+  -- IMPORTANTE: Disabilita i trigger SOLO per questa transazione
+  -- Evita il loop infinito nel trigger check_and_mark_personal_best
+  SET LOCAL session_replication_role = 'replica';
+
+  -- 1. Inserisci la sessione di allenamento
+  INSERT INTO public.training_sessions (
+    date, title, type, location, rpe, feeling, notes
+  ) VALUES (
+    p_date, p_title, p_type, p_location, p_rpe, p_feeling, p_notes
+  )
+  RETURNING id INTO v_session_id;
+
+  -- 2. Itera sui gruppi e inserisci sets
+  FOR v_group IN SELECT jsonb_array_elements(p_groups)
+  LOOP
+    DECLARE
+      v_group_id uuid;
+    BEGIN
+      -- Inserisci il gruppo di workout
+      INSERT INTO public.workout_groups (
+        session_id, order_index, name, notes
+      ) VALUES (
+        v_session_id,
+        (v_group->>'order_index')::integer,
+        v_group->>'name',
+        v_group->>'notes'
+      )
+      RETURNING id INTO v_group_id;
+
+      -- Inserisci tutti i sets di questo gruppo
+      FOR v_set IN SELECT jsonb_array_elements(v_group->'sets')
+      LOOP
+        INSERT INTO public.workout_sets (
+          group_id, exercise_name, category, sets, reps, 
+          weight_kg, distance_m, time_s, recovery_s, notes
+        ) VALUES (
+          v_group_id,
+          v_set->>'exercise_name',
+          v_set->>'category',
+          (v_set->>'sets')::integer,
+          (v_set->>'reps')::integer,
+          CASE WHEN v_set->>'weight_kg' IS NOT NULL AND v_set->>'weight_kg' != '' 
+               THEN (v_set->>'weight_kg')::numeric ELSE NULL END,
+          CASE WHEN v_set->>'distance_m' IS NOT NULL AND v_set->>'distance_m' != '' 
+               THEN (v_set->>'distance_m')::numeric ELSE NULL END,
+          CASE WHEN v_set->>'time_s' IS NOT NULL AND v_set->>'time_s' != '' 
+               THEN (v_set->>'time_s')::numeric ELSE NULL END,
+          (v_set->>'recovery_s')::integer,
+          v_set->>'notes'
+        );
+      END LOOP;
+    END;
+  END LOOP;
+
+  -- Al termine della funzione, session_replication_role torna automaticamente a 'origin'
+  -- (grazie a SET LOCAL che è limitato alla transazione)
+  RETURN v_session_id;
+END;
+$$;
+
+-- Concedi permessi di esecuzione
+GRANT EXECUTE ON FUNCTION public.insert_full_training_session(date, text, text, text, integer, text, text, jsonb) 
+  TO authenticated, anon, service_role;
+
+
 -- 5. SICUREZZA (Row Level Security)
 -- =================================================================
 ALTER TABLE public.athlete_profile ENABLE ROW LEVEL SECURITY;
