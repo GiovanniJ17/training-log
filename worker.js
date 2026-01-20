@@ -16,9 +16,10 @@ const ALLOWED_ORIGINS = [
   'http://localhost:3000',
   'http://localhost:3001',
   
-  // Production (aggiorna se cambi dominio)
+  // Production - Cloudflare Pages (tracker-velocista)
   'https://tracker-velocista.pages.dev',
-  'https://cafacafec.tracker-velocista.pages.dev'
+  // Preview deployments (*.tracker-velocista.pages.dev)
+  /^https:\/\/[a-z0-9]+\.tracker-velocista\.pages\.dev$/i
 ];
 
 const RATE_LIMIT = {
@@ -26,8 +27,20 @@ const RATE_LIMIT = {
   WINDOW_MS: 15 * 60 * 1000, // 15 minutes
 };
 
+function isOriginAllowed(origin) {
+  // Controlla origins esatte
+  if (ALLOWED_ORIGINS.some(allowed => {
+    if (typeof allowed === 'string') return allowed === origin;
+    if (allowed instanceof RegExp) return allowed.test(origin);
+    return false;
+  })) {
+    return true;
+  }
+  return false;
+}
+
 function getCorsHeaders(origin) {
-  const allowedOrigin = ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0];
+  const allowedOrigin = isOriginAllowed(origin) ? origin : ALLOWED_ORIGINS[0];
   return {
     'Access-Control-Allow-Origin': allowedOrigin,
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
