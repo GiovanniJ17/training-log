@@ -35,7 +35,7 @@ async function callAI(prompt, { json = true } = {}) {
   const workerUrl = getWorkerUrl();
   const requestBody = buildRequest(prompt, { json });
 
-  console.log('[aiCoachService] Calling worker at:', workerUrl);
+  // Chiamata al worker
 
   try {
     const response = await fetch(workerUrl, {
@@ -51,7 +51,7 @@ async function callAI(prompt, { json = true } = {}) {
     }
 
     const data = await response.json();
-    console.log('[aiCoachService] Response data:', data);
+    // Response ricevuta
     
     let content = data?.choices?.[0]?.message?.content || '';
     if (!json) return content?.trim();
@@ -61,11 +61,11 @@ async function callAI(prompt, { json = true } = {}) {
       const jsonMatch = content.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
       if (jsonMatch) {
         content = jsonMatch[1].trim();
-        console.log('[aiCoachService] Extracted JSON from markdown:', content);
+        // JSON estratto da markdown
       }
 
       const parsed = JSON.parse(content);
-      console.log('[aiCoachService] Parsed JSON:', parsed);
+      // JSON parsato
       return parsed;
     } catch (parseErr) {
       console.error('[aiCoachService] JSON parse error:', parseErr, 'Content:', content);

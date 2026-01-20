@@ -20,7 +20,7 @@ export async function getStatsData(startDate = null, endDate = null) {
     const end = new Date(rawEnd);
     const start = startDate || new Date(rawEnd.getTime() - 90 * 24 * 60 * 60 * 1000);
 
-    console.log('[statisticsService] range', {
+    // Range: {
       start: start.toISOString(),
       end: end.toISOString(),
       rawEnd: rawEnd.toISOString(),
@@ -112,7 +112,7 @@ export async function getStatsData(startDate = null, endDate = null) {
       });
     });
 
-    console.log('[statisticsService] counts', {
+    // Counts: {
       sessions: sessions.length,
       raceRecords: raceRecords.length,
       strengthRecords: strengthRecords.length,

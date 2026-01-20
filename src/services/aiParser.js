@@ -17,6 +17,14 @@ CRITICAL RULES:
    * Example: "Obiettivo 10.5 ma fermato a 10.8" → Extract time_s: 10.8 (actual), NOT 10.5 (goal)
    * Keywords: "volevo", "mirava", "dovrebbe", "ma ho fatto", "ma sono arrivato", "invece ho", "però", "purtroppo"
 
+7. STRENGTH MAXES: Recognize various ways of expressing personal bests for strength exercises:
+   * "provato il massimale, salito a 160kg" → Extract 160kg as 1RM
+   * "Squat massimale 160kg" → Extract 160kg
+   * "ho fatto 90kg PB" → Extract 90kg
+   * "salito facile a 160kg (PB assoluto)" → Extract 160kg
+   * Exercises: Squat, Bench/Panca, Deadlift/Stacco, Clean/Girata, Press, Jerk
+   * When "provato massimale" or "tentato massimale" appears, extract the ACTUAL weight achieved, not attempts
+
 NOISE FILTERING:
 - Ignore names of people ("Ho incontrato Marco...")
 - Ignore durations describing interruptions ("Marco mi ha fermato 20 minuti" is not training time)
@@ -274,7 +282,7 @@ function findDayChunks(text, reference = new Date()) {
                     /^\s*(niente|riposo|nulla|off|rest|completo|scarico)\s*[.,!?-]*$/i.test(textWithoutDate);
     
     if (isEmpty) {
-      console.log(`[findDayChunks] Skipping empty session on ${current.keyword}`);
+      // Skipping empty session
       continue;
     }
     
@@ -420,6 +428,7 @@ INSTRUCTIONS:
 5. Group logically: Warmup, Main, Strength, Cooldown, etc
 6. Session type: ONE of [pista, palestra, strada, gara, test, scarico, recupero, altro]
 7. Set session.title as concise summary (4-8 words) of main work
+8. STRENGTH MAXES: When user says "provato il massimale" or "salito a XXkg", extract as single 1RM set with weight_kg: XX, sets:1, reps:1
 8. Set session.notes as a short 1-2 sentence summary of the session using user text
 
 Example structure:
@@ -437,7 +446,7 @@ Return ONLY valid JSON. Do not include markdown or explanations.`;
   
   const headers = { 'Content-Type': 'application/json' };
   const requestBody = buildProxyRequest('gemini', userPrompt);
-  console.log('[AI Parser] Calling worker at:', workerUrl);
+  // Calling worker
   
   const response = await fetch(workerUrl, {
     method: 'POST',
@@ -479,7 +488,7 @@ Return ONLY valid JSON. Do not include markdown or explanations.`;
   let parsed;
   try {
     parsed = JSON.parse(jsonStr);
-    console.log('[parseSingleDay] JSON Mode parsing successful');
+    // JSON Mode parsing successful
   } catch (e) {
     console.warn(`[parseSingleDay] Direct JSON parsing failed, trying to extract JSON object...`);
     
@@ -901,29 +910,46 @@ export function extractPersonalBests(text) {
     }
   }
 
-  // PB forza esplicito: "Squat 100kg PB"
-  const strengthPattern = /(squat|bench|deadlift|stacco|clean|jerk|press|military\s+press|panca|trazioni?)\s+(\d+[.,]\d+|\d+)\s*kg\s+(?:PB|personal\s+best|massimale|nuovo\s+massimale)/gi;
+  // PB forza esplicito: "Squat 100kg PB" o "provato il massimale, salito a 160kg (PB assoluto)"
+  // Pattern 1: Peso seguito da indicatore PB
+  const strengthPattern = /(squat|bench|deadlift|stacco|clean|jerk|press|military\s+press|panca|trazioni?|girata)\s+(?:al\s+petto\s+)?(\d+[.,]\d+|\d+)\s*kg\s*(?:\()?(?:PB|personal\s+best|massimale|nuovo\s+massimale|PB\s+assoluto|record)/gi;
   while ((match = strengthPattern.exec(text)) !== null) {
     const exerciseName = match[1];
     const categoryMap = {
       'squat': 'squat', 'bench': 'bench', 'panca': 'bench', 'deadlift': 'deadlift', 'stacco': 'deadlift',
       'clean': 'clean', 'jerk': 'jerk', 'press': 'press', 'military press': 'press', 'military': 'press',
-      'trazioni': 'pull', 'trazione': 'pull'
+      'trazioni': 'pull', 'trazione': 'pull', 'girata': 'clean'
     };
     const category = categoryMap[exerciseName.toLowerCase()] || 'other';
     pbs.push({ type: 'strength', exercise_name: exerciseName, category, weight_kg: parseFloat(match[2].replace(',', '.')), reps: 1, is_personal_best: true });
   }
 
-  // PB forza implicito: "palestra squat 150kg" (senza PB)
+  // Pattern 2: "provato/testato il massimale ... a XXkg" o "salito a XXkg"
+  const maxAttemptPattern = /(?:provato|testato|fatto|tentato)\s+(?:il\s+)?massimale[^\.!?]{0,40}?\b(squat|bench|deadlift|stacco|clean|jerk|press|panca|girata)\s*[^\.!?]{0,30}?(?:a|facile\s+a|salito\s+a|arrivato\s+a)\s+(\d+[.,]\d+|\d+)\s*kg/gi;
+  while ((match = maxAttemptPattern.exec(text)) !== null) {
+    const exerciseName = match[1];
+    const weight = parseFloat(match[2].replace(',', '.'));
+    const categoryMap = {
+      'squat': 'squat', 'bench': 'bench', 'panca': 'bench', 'deadlift': 'deadlift', 'stacco': 'deadlift',
+      'clean': 'clean', 'jerk': 'jerk', 'press': 'press', 'girata': 'clean'
+    };
+    const category = categoryMap[exerciseName.toLowerCase()] || 'other';
+    const isDuplicate = pbs.some(pb => pb.type === 'strength' && pb.category === category && Math.abs(pb.weight_kg - weight) < 0.5);
+    if (!isDuplicate) {
+      pbs.push({ type: 'strength', exercise_name: exerciseName, category, weight_kg: weight, reps: 1, is_personal_best: true });
+    }
+  }
+
+  // PB forza implicito: "palestra squat 150kg" (senza PB esplicito)
   if (text.match(/\bpalestra\b|\bforza\b|\bmassimali\b/i)) {
-    const implicitStrengthPattern = /(?:palestra|forza)\s*:?\s*(squat|bench|deadlift|stacco|clean|jerk|press|military\s+press|panca|trazioni?)\s+(\d+[.,]\d+|\d+)\s*kg(?!\s+(?:x|reps|set))/gi;
+    const implicitStrengthPattern = /(?:palestra|forza)\s*:?\s*(squat|bench|deadlift|stacco|clean|jerk|press|military\s+press|panca|trazioni?|girata)\s+(?:al\s+petto\s+)?(\d+[.,]\d+|\d+)\s*kg(?!\s+(?:x|reps|set))/gi;
     while ((match = implicitStrengthPattern.exec(text)) !== null) {
       const exerciseName = match[1];
       const weight = parseFloat(match[2].replace(',', '.'));
       const categoryMap = {
         'squat': 'squat', 'bench': 'bench', 'panca': 'bench', 'deadlift': 'deadlift', 'stacco': 'deadlift',
         'clean': 'clean', 'jerk': 'jerk', 'press': 'press', 'military press': 'press', 'military': 'press',
-        'trazioni': 'pull', 'trazione': 'pull'
+        'trazioni': 'pull', 'trazione': 'pull', 'girata': 'clean'
       };
       const category = categoryMap[exerciseName.toLowerCase()] || 'other';
       const isDuplicate = pbs.some(pb => pb.type === 'strength' && pb.category === category && Math.abs(pb.weight_kg - weight) < 0.5);

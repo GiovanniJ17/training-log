@@ -43,9 +43,9 @@ export default function AthleteProfile() {
     if (pbsRes.success) {
       setPersonalBests(pbsRes.data);
       // Debug: Verifica la struttura dei record
-      console.log('[AthleteProfile] PersonalBests caricati:', pbsRes.data);
+      // PersonalBests caricati
       if (pbsRes.data?.raceRecords?.length > 0) {
-        console.log('[AthleteProfile] Primo race record:', pbsRes.data.raceRecords[0]);
+        // Primo race record verificato
       }
     }
     if (injuriesRes.success) setInjuries(injuriesRes.data);
@@ -75,12 +75,12 @@ export default function AthleteProfile() {
     // training_sessions è un ARRAY dovuto alla JOIN, accedi al primo elemento
     const recordDate = record?.training_sessions?.[0]?.date || record?.start_date;
     if (!recordDate) {
-      console.log('[isNewRecord] No date found for record:', record);
+      // No date found for record
       return false;
     }
     const daysSince = Math.floor((new Date() - new Date(recordDate)) / (1000 * 60 * 60 * 24));
     const isNew = daysSince <= 7;
-    console.log(`[isNewRecord] Record ${record.distance_m || record.exercise_name}m date: ${recordDate}, daysSince: ${daysSince}, isNew: ${isNew}`);
+    // Record verificato
     return isNew;
   };
 

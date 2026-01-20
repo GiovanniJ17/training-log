@@ -82,14 +82,6 @@ export default function TrainingDashboard() {
 
     if (result.success) {
       const { sessions, raceRecords, trainingRecords, strengthRecords, injuries } = result.data;
-      console.log('[TrainingDashboard] fetched', {
-        sessions: sessions.length,
-        raceRecords: raceRecords.length,
-        strengthRecords: strengthRecords.length,
-        injuries: injuries.length,
-        sessionDates: sessions.map(s => s.date),
-        raceDates: raceRecords.map(r => r.training_sessions?.[0]?.date || r.training_sessions?.date || r.created_at),
-      });
       setRawData({ sessions, raceRecords, trainingRecords, strengthRecords, injuries });
 
       // Calcola tutte le metriche

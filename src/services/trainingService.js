@@ -51,10 +51,6 @@ async function insertTrainingSession(parsedData) {
  */
 async function saveExtractedRecords(sessionId, sessionDate, personalBests = [], injuries = []) {
   try {
-    console.log('[saveExtractedRecords] Inizio salvataggio PB e infortuni');
-    console.log('[saveExtractedRecords] PB da salvare:', personalBests.length);
-    console.log('[saveExtractedRecords] Infortuni da salvare:', injuries.length);
-    
     // Salva i Personal Bests nelle tabelle specifiche
     for (const pb of personalBests) {
       try {
@@ -68,8 +64,6 @@ async function saveExtractedRecords(sessionId, sessionDate, personalBests = [], 
             .limit(1);
 
           const isTruePB = !existingRecords || existingRecords.length === 0 || pb.time_s < existingRecords[0].time_s;
-
-          console.log(`[saveExtractedRecords] Race PB ${pb.distance_m}m: ${pb.time_s}s - È PB: ${isTruePB}`);
 
           await addRaceRecord(sessionId, {
             distance_m: pb.distance_m,
@@ -95,8 +89,6 @@ async function saveExtractedRecords(sessionId, sessionDate, personalBests = [], 
             ? (!existingTraining || existingTraining.length === 0 || pb.performance_value < existingTraining[0].performance_value)
             : (!existingTraining || existingTraining.length === 0 || pb.performance_value > existingTraining[0].performance_value);
 
-          console.log(`[saveExtractedRecords] Training PB ${pb.exercise_name}: ${pb.performance_value}${performanceUnit} - È PB: ${isBetter}`);
-
           await addTrainingRecord(sessionId, {
             exercise_name: pb.exercise_name,
             exercise_type: exerciseType,
@@ -116,8 +108,6 @@ async function saveExtractedRecords(sessionId, sessionDate, personalBests = [], 
             .limit(1);
 
           const isTruePB = !existingRecords || existingRecords.length === 0 || pb.weight_kg > existingRecords[0].weight_kg;
-
-          console.log(`[saveExtractedRecords] Strength PB ${pb.exercise_name} (${pb.category}): ${pb.weight_kg}kg - È PB: ${isTruePB}`);
 
           await addStrengthRecord(sessionId, {
             exercise_name: pb.exercise_name,

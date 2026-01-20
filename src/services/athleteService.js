@@ -288,7 +288,7 @@ export async function resolveInjury(injuryId, endDate) {
  */
 export async function getPersonalBests() {
   try {
-    console.log('[athleteService] Recuperando PB dalle tabelle dedicate...');
+    // Recuperando PB dalle tabelle dedicate
     
     // Leggi dai tre record type in parallelo
     const [raceResult, trainingResult, strengthResult] = await Promise.all([
@@ -305,12 +305,6 @@ export async function getPersonalBests() {
     const raceRecords = (raceResult.data || []).filter(r => r.is_personal_best);
     const trainingRecords = (trainingResult.data || []).filter(t => t.is_personal_best);
     const strengthRecords = (strengthResult.data || []).filter(s => s.is_personal_best);
-
-    console.log('[athleteService] PB trovati:', {
-      race: raceRecords.length,
-      training: trainingRecords.length,
-      strength: strengthRecords.length,
-    });
 
     return {
       success: true,
@@ -436,9 +430,7 @@ export async function getPersonalBestsFromWorkoutSets() {
       training_sessions: [{ date: pb.session_date, type: pb.session_type }]
     }));
 
-    console.log('[athleteService] PB Sprint trovati:', raceRecords);
-    console.log('[athleteService] PB Salti trovati:', trainingRecords);
-    console.log('[athleteService] PB Forza trovati:', strengthRecords);
+    // PB caricati correttamente
 
     return {
       success: true,
