@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Sparkles, Loader2, CheckCircle2, AlertCircle } from 'lucide-react';
 import { parseTrainingWithAI, validateParsedData } from '../services/aiParser';
 import { saveTrainingSessions } from '../services/trainingService';
+import AmbiguityModal from './AmbiguityModal';
 
 function friendlyErrorMessage(message) {
   const text = (message || '').toLowerCase();
@@ -27,6 +28,8 @@ export default function AITrainingInput({ onDataSaved }) {
   const [parsedData, setParsedData] = useState(null);
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(false);
+  const [ambiguityQuestions, setAmbiguityQuestions] = useState(null);
+  const [warnings, setWarnings] = useState([]);
 
   const handleParse = async () => {
     if (!trainingText.trim()) {
@@ -38,9 +41,15 @@ export default function AITrainingInput({ onDataSaved }) {
     setError(null);
     setParsedData(null);
     setSuccess(false);
+    setAmbiguityQuestions(null);
+    setWarnings([]);
 
     try {
       const parsed = await parseTrainingWithAI(trainingText, new Date());
+      
+      // Estrai questions e warnings dall'AI
+      const questionsFromAI = parsed.questions_for_user || [];
+      const warningsFromAI = parsed.warnings || [];
       
       // Valida i dati
       const validation = validateParsedData(parsed);
@@ -48,6 +57,16 @@ export default function AITrainingInput({ onDataSaved }) {
         setError(`Errori di validazione: ${validation.errors.join(', ')}`);
         setLoading(false);
         return;
+      }
+
+      // Se ci sono domande, mostra il modal
+      if (questionsFromAI.length > 0) {
+        setAmbiguityQuestions(questionsFromAI);
+      }
+      
+      // Mostra i warnings
+      if (warningsFromAI.length > 0) {
+        setWarnings(warningsFromAI);
       }
 
       setParsedData(parsed);
@@ -84,6 +103,28 @@ export default function AITrainingInput({ onDataSaved }) {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleResolveAmbiguity = (answers) => {
+    // Applica le risposte utente al parsed data
+    if (parsedData && answers) {
+      const updatedData = { ...parsedData };
+      
+      // Aggiorna i campi basato sulle risposte
+      Object.entries(answers).forEach(([field, value]) => {
+        if (updatedData[field]) {
+          updatedData[field] = value;
+        }
+      });
+      
+      setParsedData(updatedData);
+    }
+    
+    setAmbiguityQuestions(null);
+  };
+
+  const handleSkipAmbiguity = () => {
+    setAmbiguityQuestions(null);
   };
 
   return (
@@ -158,6 +199,23 @@ export default function AITrainingInput({ onDataSaved }) {
                 {parsedData?.sessions?.length > 1
                   ? 'Sessioni salvate con successo!'
                   : 'Sessione salvata con successo!'}
+              </div>
+            </div>
+          )}
+
+          {/* Warnings */}
+          {warnings.length > 0 && (
+            <div className="space-y-2 p-4 bg-yellow-900/30 border border-yellow-700 rounded-lg">
+              <div className="flex items-center gap-2 mb-2">
+                <AlertCircle className="w-5 h-5 text-yellow-400 flex-shrink-0" />
+                <h4 className="font-semibold text-yellow-200">Avvisi dall'IA</h4>
+              </div>
+              <div className="space-y-2">
+                {warnings.map((warning, idx) => (
+                  <div key={idx} className="text-sm text-yellow-100">
+                    <span className="font-medium">{warning.type}:</span> {warning.message}
+                  </div>
+                ))}
               </div>
             </div>
           )}
@@ -318,6 +376,15 @@ export default function AITrainingInput({ onDataSaved }) {
           </div>
         </div>
       </div>
+
+      {/* Ambiguity Modal */}
+      {ambiguityQuestions && (
+        <AmbiguityModal
+          questions={ambiguityQuestions}
+          onResolve={handleResolveAmbiguity}
+          onSkip={handleSkipAmbiguity}
+        />
+      )}
     </div>
   );
 }

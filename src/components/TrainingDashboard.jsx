@@ -23,6 +23,8 @@ import {
   getWhatIfPrediction,
   getAdaptiveWorkoutSuggestion,
 } from '../services/aiCoachService';
+import { generateProactiveAlerts } from '../services/proactiveCoach';
+import CoachAlerts from './CoachAlerts';
 
 const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'];
 
@@ -48,6 +50,7 @@ export default function TrainingDashboard() {
   const [whatIfLoading, setWhatIfLoading] = useState(false);
   const [adaptiveFocus, setAdaptiveFocus] = useState('');
   const [adaptiveResult, setAdaptiveResult] = useState(null);
+  const [alerts, setAlerts] = useState([]);
   const [adaptiveLoading, setAdaptiveLoading] = useState(false);
   const [adaptiveError, setAdaptiveError] = useState(null);
 
@@ -105,6 +108,21 @@ export default function TrainingDashboard() {
 
       const monthly = getMonthlyMetrics(sessions, raceRecords);
       setMonthlyMetrics(monthly);
+
+      // Genera gli alert proattivi del coach
+      try {
+        const detectedAlerts = await generateProactiveAlerts(
+          sessions,
+          raceRecords,
+          strengthRecords,
+          trainingRecords,
+          injuries
+        );
+        setAlerts(detectedAlerts || []);
+      } catch (err) {
+        console.error('Errore generazione alert:', err);
+        setAlerts([]);
+      }
     }
 
     setLoading(false);
@@ -253,6 +271,9 @@ export default function TrainingDashboard() {
           </button>
         </div>
       </div>
+
+      {/* Proactive Alerts */}
+      {alerts.length > 0 && <CoachAlerts alerts={alerts} />}
 
       {/* Coach AI & What-if */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
