@@ -15,12 +15,9 @@ const ALLOWED_ORIGINS = [
   'http://localhost:5173',
   'http://localhost:3000',
   
-  // ⚠️ PRODUCTION: Aggiungi qui il tuo dominio reale prima del deploy!
-  // Esempi:
-  // 'https://training-log.pages.dev',
-  // 'https://tracker-velocista.pages.dev',
-  // 'https://your-custom-domain.com',
-  // Se NON aggiorni questa lista, il frontend NON potrà comunicare con il worker (CORS error)
+  // Production (aggiorna se cambi dominio)
+  'https://tracker-velocista.pages.dev',
+  'https://cafacafec.tracker-velocista.pages.dev'
 ];
 
 const RATE_LIMIT = {

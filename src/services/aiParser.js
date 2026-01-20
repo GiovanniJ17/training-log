@@ -436,6 +436,8 @@ async function parseSingleDay({ text, date, titleHint, devApiKey = null, athlete
     // Template con esempi concreti di esercizi
     const jsonTemplate = `{
   "session": {"date":"${date}","title":"${titleHint || 'Session'}","type":"pista","rpe":null,"feeling":null,"notes":null},
+  "questions_for_user": [],
+  "warnings": [],
   "groups": [
     {"name":"Riscaldamento","order_index":0,"notes":null,"sets":[
       {"exercise_name":"Corsa 2km","category":"endurance","sets":1,"reps":1,"weight_kg":null,"distance_m":2000,"time_s":null,"recovery_s":null,"notes":null,"details":{}}
@@ -443,9 +445,7 @@ async function parseSingleDay({ text, date, titleHint, devApiKey = null, athlete
     {"name":"Lavoro Principale","order_index":1,"notes":null,"sets":[
       {"exercise_name":"Sprint 100m","category":"sprint","sets":4,"reps":1,"weight_kg":null,"distance_m":100,"time_s":null,"recovery_s":180,"notes":null,"details":{}}
     ]}
-  ],
-  "questions_for_user": [],
-  "warnings": []
+  ]
 }`;
 
   const userPrompt = `${context}
