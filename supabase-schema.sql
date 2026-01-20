@@ -81,3 +81,20 @@ CREATE TABLE public.workout_sets (
   CONSTRAINT workout_sets_pkey PRIMARY KEY (id),
   CONSTRAINT workout_sets_group_id_fkey FOREIGN KEY (group_id) REFERENCES public.workout_groups(id)
 );
+
+-- Performance Indexes
+-- Ottimizza le query di join per le foreign keys
+CREATE INDEX IF NOT EXISTS idx_workout_groups_session ON public.workout_groups(session_id);
+CREATE INDEX IF NOT EXISTS idx_workout_sets_group ON public.workout_sets(group_id);
+
+-- Ottimizza le query per data (uso frequente per filtrare sessioni)
+CREATE INDEX IF NOT EXISTS idx_training_sessions_date ON public.training_sessions(date DESC);
+
+-- Ottimizza le query per tipo di sessione
+CREATE INDEX IF NOT EXISTS idx_training_sessions_type ON public.training_sessions(type);
+
+-- Ottimizza le ricerche per categoria di esercizio
+CREATE INDEX IF NOT EXISTS idx_workout_sets_category ON public.workout_sets(category);
+
+-- Indice composito per query statistiche comuni (data + tipo)
+CREATE INDEX IF NOT EXISTS idx_training_sessions_date_type ON public.training_sessions(date DESC, type);

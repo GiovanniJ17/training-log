@@ -289,6 +289,84 @@ function findDayChunks(text, reference = new Date()) {
   return chunks;
 }
 
+/**
+ * Sanitizza la risposta JSON rimuovendo testo extra prima/dopo
+ */
+function sanitizeJsonResponse(jsonStr) {
+  if (!jsonStr) return '{}';
+  
+  // Rimuovi caratteri di controllo invisibili
+  jsonStr = jsonStr.replace(/[\u0000-\u001F\u007F-\u009F]/g, '');
+  
+  // Trova il primo { e l'ultimo } bilanciato
+  const firstBrace = jsonStr.indexOf('{');
+  if (firstBrace === -1) return '{}';
+  
+  let braceCount = 0;
+  let lastBrace = -1;
+  
+  for (let i = firstBrace; i < jsonStr.length; i++) {
+    if (jsonStr[i] === '{') braceCount++;
+    if (jsonStr[i] === '}') {
+      braceCount--;
+      if (braceCount === 0) {
+        lastBrace = i;
+        break;
+      }
+    }
+  }
+  
+  if (lastBrace === -1) return '{}';
+  
+  return jsonStr.slice(firstBrace, lastBrace + 1);
+}
+
+/**
+ * Parse sicuro per interi - gestisce range e valori non validi
+ */
+function safeParseInt(value, defaultValue = null) {
+  if (value === null || value === undefined) return defaultValue;
+  
+  // Converti a stringa per gestire vari tipi di input
+  const str = String(value).trim();
+  
+  // Gestisci range (es. "20-25") - prendi il primo valore
+  if (str.includes('-')) {
+    const parts = str.split('-');
+    const firstNum = parseInt(parts[0], 10);
+    if (!isNaN(firstNum) && firstNum > 0) {
+      console.warn(`[safeParseInt] Range detected "${str}", using first value: ${firstNum}`);
+      return firstNum;
+    }
+  }
+  
+  const parsed = parseInt(str, 10);
+  return isNaN(parsed) ? defaultValue : parsed;
+}
+
+/**
+ * Parse sicuro per float - gestisce range e valori non validi
+ */
+function safeParseFloat(value, defaultValue = null) {
+  if (value === null || value === undefined) return defaultValue;
+  
+  // Converti a stringa per gestire vari tipi di input
+  const str = String(value).trim().replace(',', '.');
+  
+  // Gestisci range (es. "60-80") - prendi il primo valore
+  if (str.includes('-')) {
+    const parts = str.split('-');
+    const firstNum = parseFloat(parts[0]);
+    if (!isNaN(firstNum) && firstNum > 0) {
+      console.warn(`[safeParseFloat] Range detected "${str}", using first value: ${firstNum}`);
+      return firstNum;
+    }
+  }
+  
+  const parsed = parseFloat(str);
+  return isNaN(parsed) ? defaultValue : parsed;
+}
+
 function buildProxyRequest(provider, userPrompt) {
   const baseRequest = {
     provider: 'gemini',
@@ -394,6 +472,9 @@ Return ONLY valid JSON. Do not include markdown or explanations.`;
     if (match) jsonStr = match[1];
   }
 
+  // Sanitizza il JSON prima del parsing (rimuove testo extra prima/dopo)
+  jsonStr = sanitizeJsonResponse(jsonStr);
+
   // JSON Mode di Gemini ritorna JSON direttamente, parsing diretto
   let parsed;
   try {
@@ -459,12 +540,12 @@ Return ONLY valid JSON. Do not include markdown or explanations.`;
       .map(set => ({
         exercise_name: (set.exercise_name || 'Unknown').trim(),
         category: set.category || 'other',
-        sets: parseInt(set.sets) || 1,
-        reps: parseInt(set.reps) || 1,
-        weight_kg: set.weight_kg ? parseFloat(set.weight_kg) : null,
-        distance_m: set.distance_m ? parseFloat(set.distance_m) : null,
-        time_s: set.time_s ? parseFloat(set.time_s) : null,
-        recovery_s: set.recovery_s ? parseFloat(set.recovery_s) : null,
+        sets: safeParseInt(set.sets, 1),
+        reps: safeParseInt(set.reps, 1),
+        weight_kg: safeParseFloat(set.weight_kg),
+        distance_m: safeParseFloat(set.distance_m),
+        time_s: safeParseFloat(set.time_s),
+        recovery_s: safeParseInt(set.recovery_s),
         notes: set.notes || null,
         details: set.details || {}
       }))
