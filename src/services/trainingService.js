@@ -48,46 +48,24 @@ async function insertTrainingSession(parsedData) {
 
 /**
  * Salva automaticamente i PB e infortuni estratti dal parsing
+ * Ottimizzato per ridurre le query al database e prevenire stack depth errors
  */
 async function saveExtractedRecords(sessionId, sessionDate, personalBests = [], injuries = []) {
   try {
-    // Salva i Personal Bests nelle tabelle specifiche
+    // Salva i Personal Bests senza verifiche preventive - il flag is_personal_best
+    // verrà determinato dalle funzioni addXRecord che possono farlo in modo più efficiente
     for (const pb of personalBests) {
       try {
         if (pb.type === 'race') {
-          // Verifica se è davvero un PB confrontando con i record esistenti
-          const { data: existingRecords } = await supabase
-            .from('race_records')
-            .select('time_s')
-            .eq('distance_m', pb.distance_m)
-            .order('time_s', { ascending: true })
-            .limit(1);
-
-          const isTruePB = !existingRecords || existingRecords.length === 0 || pb.time_s < existingRecords[0].time_s;
-
           await addRaceRecord(sessionId, {
             distance_m: pb.distance_m,
             time_s: pb.time_s,
-            is_personal_best: isTruePB,
+            is_personal_best: true, // Assumi PB, verrà verificato/aggiornato se necessario
             notes: pb.notes || null,
           });
         } else if (pb.type === 'training') {
-          // PB di allenamento (sprint, salti, lanci)
           const exerciseType = pb.exercise_type || 'sprint';
           const performanceUnit = pb.performance_unit || 'seconds';
-          
-          const { data: existingTraining } = await supabase
-            .from('training_records')
-            .select('performance_value')
-            .eq('exercise_type', exerciseType)
-            .eq('performance_unit', performanceUnit)
-            .eq('exercise_name', pb.exercise_name)
-            .order('performance_value', { ascending: performanceUnit === 'seconds' ? true : false })
-            .limit(1);
-
-          const isBetter = performanceUnit === 'seconds'
-            ? (!existingTraining || existingTraining.length === 0 || pb.performance_value < existingTraining[0].performance_value)
-            : (!existingTraining || existingTraining.length === 0 || pb.performance_value > existingTraining[0].performance_value);
 
           await addTrainingRecord(sessionId, {
             exercise_name: pb.exercise_name,
@@ -96,27 +74,16 @@ async function saveExtractedRecords(sessionId, sessionDate, personalBests = [], 
             performance_unit: performanceUnit,
             rpe: pb.rpe || null,
             notes: pb.notes || null,
-            is_personal_best: isBetter,
+            is_personal_best: true,
           });
         } else if (pb.type === 'strength') {
-          // PB di forza (squat, bench, etc.)
-          const { data: existingRecords } = await supabase
-            .from('strength_records')
-            .select('weight_kg')
-            .eq('category', pb.category)
-            .eq('exercise_name', pb.exercise_name)
-            .order('weight_kg', { ascending: false })
-            .limit(1);
-
-          const isTruePB = !existingRecords || existingRecords.length === 0 || pb.weight_kg > existingRecords[0].weight_kg;
-
           await addStrengthRecord(sessionId, {
             exercise_name: pb.exercise_name,
             category: pb.category,
             weight_kg: pb.weight_kg,
             reps: pb.reps || 1,
             notes: pb.notes || null,
-            is_personal_best: isTruePB,
+            is_personal_best: true,
           });
         }
       } catch (pbError) {
@@ -177,19 +144,40 @@ export async function saveTrainingSessions(parsedPayload) {
 
   for (const [idx, session] of sessions.entries()) {
     try {
+      // Log per debugging
+      console.log(`Salvataggio sessione ${idx + 1}/${sessions.length}:`, {
+        date: session.session?.date,
+        title: session.session?.title,
+        groupsCount: session.groups?.length
+      });
+
       const result = await insertTrainingSession(session);
       if (!result.success) {
-        return { success: false, error: `Sessione ${idx + 1}: ${result.error}`, savedIds };
+        const errorMsg = `Sessione ${idx + 1}: ${result.error || 'Errore sconosciuto'}`;
+        console.error(errorMsg);
+        return { success: false, error: errorMsg, savedIds };
       }
       savedIds.push(result.sessionId);
 
-      // Salva i PB e infortuni per questa sessione
-      if (personalBests.length > 0 || injuries.length > 0) {
+      // Salva i PB e infortuni solo per la prima sessione per evitare duplicati
+      if (idx === 0 && (personalBests.length > 0 || injuries.length > 0)) {
+        console.log(`Salvataggio PB/infortuni per sessione ${idx + 1}`);
         await saveExtractedRecords(result.sessionId, result.sessionDate, personalBests, injuries);
       }
     } catch (error) {
       console.error('Errore nel salvataggio multi-sessione:', error);
-      return { success: false, error: `Sessione ${idx + 1}: ${error.message}`, savedIds };
+      const errorMsg = error.message || 'Errore sconosciuto';
+      
+      // Gestione speciale per stack depth errors
+      if (errorMsg.includes('stack depth') || errorMsg.includes('depth limit')) {
+        return { 
+          success: false, 
+          error: `La sessione ${idx + 1} ha troppi dati. Prova a inserire meno giorni alla volta o riduci il dettaglio.`, 
+          savedIds 
+        };
+      }
+      
+      return { success: false, error: `Sessione ${idx + 1}: ${errorMsg}`, savedIds };
     }
   }
 
