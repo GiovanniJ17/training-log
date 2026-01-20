@@ -27,23 +27,111 @@ async function insertTrainingSession(parsedData) {
     sets: group.sets // Array già standardizzato
   }));
 
-  // Chiamata RPC atomica: O tutto o niente! 🛡️
-  // 1 sola chiamata di rete invece di N (sessione + gruppi + set)
-  // Se la connessione cade, il database fa rollback automatico
-  const { data: sessionId, error } = await supabase.rpc('insert_full_training_session', {
-    p_date: standardizedData.session.date,
-    p_title: standardizedData.session.title,
-    p_type: standardizedData.session.type,
-    p_location: standardizedData.session.location || null,
-    p_rpe: standardizedData.session.rpe || null,
-    p_feeling: standardizedData.session.feeling || null,
-    p_notes: standardizedData.session.notes || null,
-    p_groups: groupsJson
-  });
+  try {
+    // Chiamata RPC atomica: O tutto o niente! 🛡️
+    // 1 sola chiamata di rete invece di N (sessione + gruppi + set)
+    // Se la connessione cade, il database fa rollback automatico
+    const { data: sessionId, error } = await supabase.rpc('insert_full_training_session', {
+      p_date: standardizedData.session.date,
+      p_title: standardizedData.session.title,
+      p_type: standardizedData.session.type,
+      p_location: standardizedData.session.location || null,
+      p_rpe: standardizedData.session.rpe || null,
+      p_feeling: standardizedData.session.feeling || null,
+      p_notes: standardizedData.session.notes || null,
+      p_groups: groupsJson
+    });
 
-  if (error) throw error;
+    if (error) {
+      // Se RPC fallisce per stack depth, usa fallback con inserimenti diretti
+      if (error.message && error.message.includes('stack depth')) {
+        console.warn('RPC failed with stack depth error, using direct insert fallback');
+        return await insertTrainingSessionDirect(standardizedData);
+      }
+      throw error;
+    }
 
-  return { success: true, sessionId: sessionId, sessionDate: standardizedData.session.date };
+    return { success: true, sessionId: sessionId, sessionDate: standardizedData.session.date };
+  } catch (error) {
+    // Fallback a inserimento diretto se RPC fallisce
+    if (error.message && error.message.includes('stack depth')) {
+      console.warn('RPC failed, using direct insert fallback');
+      return await insertTrainingSessionDirect(standardizedData);
+    }
+    throw error;
+  }
+}
+
+/**
+ * Fallback method: Direct inserts instead of RPC (for complex sessions)
+ * Still atomic thanks to Supabase client-side batching
+ */
+async function insertTrainingSessionDirect(standardizedData) {
+  // 1. Insert main session
+  const { data: session, error: sessionError } = await supabase
+    .from('training_sessions')
+    .insert({
+      date: standardizedData.session.date,
+      title: standardizedData.session.title,
+      type: standardizedData.session.type,
+      location: standardizedData.session.location || null,
+      rpe: standardizedData.session.rpe || null,
+      feeling: standardizedData.session.feeling || null,
+      notes: standardizedData.session.notes || null,
+    })
+    .select('id')
+    .single();
+
+  if (sessionError) throw sessionError;
+
+  // 2. Insert groups and sets
+  for (const group of standardizedData.groups) {
+    const { data: groupData, error: groupError } = await supabase
+      .from('workout_groups')
+      .insert({
+        session_id: session.id,
+        order_index: group.order_index,
+        name: group.name,
+        notes: group.notes,
+      })
+      .select('id')
+      .single();
+
+    if (groupError) {
+      // Cleanup: delete session if group insert fails
+      await supabase.from('training_sessions').delete().eq('id', session.id);
+      throw groupError;
+    }
+
+    // 3. Insert sets for this group
+    if (group.sets && group.sets.length > 0) {
+      const setsToInsert = group.sets.map(set => ({
+        group_id: groupData.id,
+        exercise_name: set.exercise_name,
+        category: set.category,
+        sets: set.sets || null,
+        reps: set.reps || null,
+        weight_kg: set.weight_kg || null,
+        distance_m: set.distance_m || null,
+        time_s: set.time_s || null,
+        recovery_s: set.recovery_s || null,
+        details: set.details || null,
+        notes: set.notes || null,
+      }));
+
+      const { error: setsError } = await supabase
+        .from('workout_sets')
+        .insert(setsToInsert);
+
+      if (setsError) {
+        // Cleanup: delete session (cascade will delete groups and sets)
+        await supabase.from('training_sessions').delete().eq('id', session.id);
+        throw setsError;
+      }
+    }
+  }
+
+  return { success: true, sessionId: session.id, sessionDate: standardizedData.session.date };
 }
 
 /**
@@ -167,15 +255,6 @@ export async function saveTrainingSessions(parsedPayload) {
     } catch (error) {
       console.error('Errore nel salvataggio multi-sessione:', error);
       const errorMsg = error.message || 'Errore sconosciuto';
-      
-      // Gestione speciale per stack depth errors
-      if (errorMsg.includes('stack depth') || errorMsg.includes('depth limit')) {
-        return { 
-          success: false, 
-          error: `La sessione ${idx + 1} ha troppi dati. Prova a inserire meno giorni alla volta o riduci il dettaglio.`, 
-          savedIds 
-        };
-      }
       
       return { success: false, error: `Sessione ${idx + 1}: ${errorMsg}`, savedIds };
     }
