@@ -443,7 +443,9 @@ async function parseSingleDay({ text, date, titleHint, devApiKey = null, athlete
     {"name":"Lavoro Principale","order_index":1,"notes":null,"sets":[
       {"exercise_name":"Sprint 100m","category":"sprint","sets":4,"reps":1,"weight_kg":null,"distance_m":100,"time_s":null,"recovery_s":180,"notes":null,"details":{}}
     ]}
-  ]
+  ],
+  "questions_for_user": [],
+  "warnings": []
 }`;
 
   const userPrompt = `${context}
@@ -466,6 +468,10 @@ INSTRUCTIONS:
 7. Set session.title as concise summary (4-8 words) of main work
 8. STRENGTH MAXES: When user says "provato il massimale" or "salito a XXkg", extract as single 1RM set with weight_kg: XX, sets:1, reps:1
 8. Set session.notes as a short 1-2 sentence summary of the session using user text
+
+REQUIRED OUTPUT FIELDS (ALWAYS PRESENT):
+- questions_for_user: array (can be empty). If any ambiguity exists (units missing, recovery unclear, distance unclear, vague exercise), ADD a question here. NEVER guess.
+- warnings: array (can be empty). Add anomalies or impossible values here.
 
 Example structure:
 ${jsonTemplate}
@@ -578,6 +584,8 @@ ANOMALIES: If a value seems impossible or unusual (e.g., 100m in 9s), add a warn
   // Garantisci struttura
   if (!parsed.session) parsed.session = {};
   if (!parsed.groups) parsed.groups = [];
+  if (!parsed.questions_for_user) parsed.questions_for_user = [];
+  if (!parsed.warnings) parsed.warnings = [];
 
   parsed.session.date = date;
   if (!parsed.session.title || !parsed.session.title.trim()) {
@@ -721,7 +729,9 @@ export async function parseTrainingWithAI(trainingText, referenceDate = new Date
       derivePBsFromSessions(sessions)
     );
     const injuries = extractInjuries(trimmed);
-    return { sessions, personalBests, injuries };
+    const questions = sessions.flatMap(s => s.questions_for_user || []);
+    const warnings = sessions.flatMap(s => s.warnings || []);
+    return { sessions, personalBests, injuries, questions_for_user: questions, warnings };
   }
 
   // Caso singolo giorno: cerca data esplicita nel testo
@@ -749,7 +759,9 @@ export async function parseTrainingWithAI(trainingText, referenceDate = new Date
     derivePBsFromSessions([parsed])
   );
   const injuries = extractInjuries(trimmed);
-  return { sessions: [parsed], personalBests, injuries };
+  const questions = parsed.questions_for_user || [];
+  const warnings = parsed.warnings || [];
+  return { sessions: [parsed], personalBests, injuries, questions_for_user: questions, warnings };
 }
 
 function validateSingleSession(data) {
