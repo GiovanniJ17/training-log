@@ -1,5 +1,0 @@
-name = "training-log-ai-proxy"
-main = "worker.js"
-compatibility_date = "2024-01-01"
-
-vars = { GEMINI_API_KEY = "AIzaSyDh2al5vX84ykI6WVYninO2Z_jO-2wwRXM" }

@@ -12,6 +12,9 @@
 import { getAthleteContext } from './contextService.js'
 import { buildSchemaRequest } from './aiSchema.js'
 
+const DEFAULT_WORKER_URL =
+  'https://us-central1-tracker-velocista.cloudfunctions.net/aiProxy'
+
 const AI_SYSTEM_PROMPT = `You are an expert Italian training data parser. Extract training data with EXTREME PRECISION.
 
 EXERCISE NORMALIZATION (AI-based mapping):
@@ -482,15 +485,12 @@ ANOMALIES: If a value seems impossible or unusual (e.g., 100m in 9s), add a warn
       requestBody.apiKey = devApiKey
     }
 
-    // Worker URL (env override also in dev)
-    let workerUrl = import.meta.env.VITE_WORKER_URL || 'http://localhost:5000'
-    if (!import.meta.env.VITE_WORKER_URL && import.meta.env.MODE === 'production') {
-      throw new Error('Missing VITE_WORKER_URL in production')
-    }
+    // Worker URL (env override optional)
+    const workerUrl = import.meta.env.VITE_WORKER_URL || DEFAULT_WORKER_URL
 
     const headers = { 'Content-Type': 'application/json' }
     console.log('[Parser] Env mode:', import.meta.env.MODE)
-    console.log('[Parser] Env VITE_WORKER_URL:', import.meta.env.VITE_WORKER_URL || '(unset)')
+    console.log('[Parser] Worker URL:', workerUrl)
 
     console.log('[Parser] About to fetch from:', workerUrl)
     console.log('[Parser] Request body size:', JSON.stringify(requestBody).length, 'bytes')

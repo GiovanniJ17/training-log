@@ -4,7 +4,8 @@
  */
 
 const MODEL = 'gemini-2.5-flash'
-const DEFAULT_WORKER_URL = 'http://localhost:5000'
+const DEFAULT_WORKER_URL =
+  'https://us-central1-tracker-velocista.cloudfunctions.net/aiProxy'
 
 // Schemi di output attesi per forzare JSON valido dal worker
 const WEEKLY_INSIGHT_SCHEMA = {
@@ -28,17 +29,7 @@ const ADAPTIVE_SCHEMA = {
 }
 
 function getWorkerUrl() {
-  // Consente override anche in dev con VITE_WORKER_URL
-  if (import.meta.env.VITE_WORKER_URL) {
-    return import.meta.env.VITE_WORKER_URL
-  }
-
-  if (import.meta.env.MODE === 'production') {
-    console.error('Missing VITE_WORKER_URL in production')
-    return ''
-  }
-
-  return DEFAULT_WORKER_URL
+  return import.meta.env.VITE_WORKER_URL || DEFAULT_WORKER_URL
 }
 
 function buildRequest(prompt, { schema } = {}) {
@@ -68,7 +59,7 @@ async function callAI(prompt, { schema } = {}) {
   const workerUrl = getWorkerUrl()
   const requestBody = buildRequest(prompt, { schema })
   console.log('[aiCoachService] Env mode:', import.meta.env.MODE)
-  console.log('[aiCoachService] Env VITE_WORKER_URL:', import.meta.env.VITE_WORKER_URL || '(unset)')
+  console.log('[aiCoachService] Worker URL:', getWorkerUrl())
 
   // Implementa timeout di sicurezza (15 secondi max)
   const controller = new AbortController()

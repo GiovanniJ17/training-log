@@ -4,17 +4,14 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "worker:dev": "wrangler dev --config wrangler-ai-proxy.toml --local",
     "build": "vite build",
     "preview": "vite preview",
-    "pages:build": "npm run build",
-    "pages:dev": "wrangler pages dev --compatibility-date=2024-01-01 -- npm run dev",
     "setup": "node scripts/setup.js",
     "check-env": "node scripts/check-env.cjs",
     "verify:deploy": "node scripts/check-env.cjs",
     "lint": "eslint \"src/**/*.{js,jsx}\"",
-    "format": "prettier -c \"src/**/*.{js,jsx,css}\" \"scripts/**/*.{js,cjs}\" \"vite.config.js\" \"postcss.config.cjs\" \"tailwind.config.js\" \"worker.js\"",
-    "format:write": "prettier -w \"src/**/*.{js,jsx,css}\" \"scripts/**/*.{js,cjs}\" \"vite.config.js\" \"postcss.config.cjs\" \"tailwind.config.js\" \"worker.js\"",
+    "format": "prettier -c \"src/**/*.{js,jsx,css}\" \"scripts/**/*.{js,cjs}\" \"vite.config.js\" \"postcss.config.cjs\" \"tailwind.config.js\"",
+    "format:write": "prettier -w \"src/**/*.{js,jsx,css}\" \"scripts/**/*.{js,cjs}\" \"vite.config.js\" \"postcss.config.cjs\" \"tailwind.config.js\"",
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc -p tsconfig.json --noEmit",
@@ -25,7 +22,6 @@
     "test:stress:full": "node scripts/stress-test-runner.js full"
   },
   "dependencies": {
-    "@supabase/supabase-js": "^2.90.1",
     "date-fns": "^4.1.0",
     "dotenv": "^16.4.5",
     "firebase": "^12.8.0",
@@ -52,7 +48,6 @@
     "tailwindcss": "^3.4.1",
     "typescript": "^5.9.3",
     "vite": "^7.3.1",
-    "vitest": "^4.0.18",
-    "wrangler": "^4.35.0"
+    "vitest": "^4.0.18"
   }
 }

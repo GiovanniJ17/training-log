@@ -37,7 +37,6 @@ envLines.forEach((line) => {
 // Variabili richieste
 const required = [
   'VITE_GEMINI_API_KEY',
-  'VITE_WORKER_URL',
   'VITE_FIREBASE_API_KEY',
   'VITE_FIREBASE_AUTH_DOMAIN',
   'VITE_FIREBASE_PROJECT_ID',
