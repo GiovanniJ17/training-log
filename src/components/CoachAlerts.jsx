@@ -5,6 +5,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { generateProactiveAlerts } from '../services/proactiveCoach'
+import LoadingSpinner from './LoadingSpinner'
 
 // Se vengono passati alerts/ loading dal parent non viene fatta la fetch interna
 export default function CoachAlerts({ alerts: externalAlerts, loading: externalLoading = false }) {
@@ -44,9 +45,7 @@ export default function CoachAlerts({ alerts: externalAlerts, loading: externalL
 
   if (loading) {
     return (
-      <div className="p-4 bg-gray-100 dark:bg-gray-800 rounded-lg animate-pulse">
-        <div className="h-4 bg-gray-300 dark:bg-gray-700 rounded w-3/4"></div>
-      </div>
+      <LoadingSpinner message="Caricamento alert coach..." />
     )
   }
 
@@ -57,11 +56,11 @@ export default function CoachAlerts({ alerts: externalAlerts, loading: externalL
   const getSeverityColor = (severity) => {
     switch (severity) {
       case 'high':
-        return 'bg-red-100 dark:bg-red-900/30 border-red-500 dark:border-red-700'
+        return 'bg-red-900/20 border-red-500/70'
       case 'medium':
-        return 'bg-yellow-100 dark:bg-yellow-900/30 border-yellow-500 dark:border-yellow-700'
+        return 'bg-amber-900/20 border-amber-500/70'
       default:
-        return 'bg-blue-100 dark:bg-blue-900/30 border-blue-500 dark:border-blue-700'
+        return 'bg-sky-900/20 border-sky-500/70'
     }
   }
 
@@ -70,19 +69,21 @@ export default function CoachAlerts({ alerts: externalAlerts, loading: externalL
       {visibleAlerts.map((alert, index) => (
         <div
           key={index}
-          className={`p-4 border-l-4 rounded-r-lg shadow-sm ${getSeverityColor(alert.severity)}`}
+          className={`widget-card widget-shine panel-body border-l-4 rounded-r-lg transition-shadow duration-200 hover:shadow-md ${getSeverityColor(
+            alert.severity
+          )}`}
         >
           <div className="flex items-start justify-between gap-3">
             <div className="flex-1">
               {/* Title */}
-              <h4 className="font-semibold text-gray-900 dark:text-white mb-1">{alert.title}</h4>
+              <h4 className="font-semibold text-white mb-1">{alert.title}</h4>
 
               {/* Message */}
-              <p className="text-sm text-gray-700 dark:text-gray-300 mb-2">{alert.message}</p>
+              <p className="text-sm text-gray-300 mb-2">{alert.message}</p>
 
               {/* Recommendation */}
-              <div className="bg-white dark:bg-gray-800 p-3 rounded-lg text-sm">
-                <p className="text-gray-600 dark:text-gray-400 italic">
+              <div className="glass-panel p-3 rounded-lg text-sm">
+                <p className="text-gray-300 italic">
                   💡 <strong>Consiglio:</strong> {alert.recommendation}
                 </p>
               </div>
@@ -90,10 +91,10 @@ export default function CoachAlerts({ alerts: externalAlerts, loading: externalL
               {/* Data details (expandable) */}
               {alert.data && (
                 <details className="mt-2">
-                  <summary className="text-xs text-gray-500 dark:text-gray-500 cursor-pointer hover:text-gray-700 dark:hover:text-gray-300">
+                  <summary className="summary-muted active:translate-y-px">
                     Dettagli tecnici
                   </summary>
-                  <pre className="mt-2 text-xs bg-gray-800 text-gray-300 p-2 rounded overflow-x-auto">
+                  <pre className="mt-2 text-xs bg-slate-900/80 text-gray-300 p-2 rounded overflow-x-auto">
                     {JSON.stringify(alert.data, null, 2)}
                   </pre>
                 </details>
@@ -103,7 +104,7 @@ export default function CoachAlerts({ alerts: externalAlerts, loading: externalL
             {/* Dismiss button */}
             <button
               onClick={() => dismissAlert(alert.type)}
-              className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors"
+              className="btn-icon btn-ghost link-muted"
               title="Nascondi alert"
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">

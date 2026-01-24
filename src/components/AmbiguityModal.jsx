@@ -30,17 +30,15 @@ export default function AmbiguityModal({ questions, onResolve, onSkip }) {
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full p-6">
+      <div className="modal-shell max-w-md p-6">
         {/* Header */}
-        <div className="flex items-center gap-3 mb-4">
-          <div className="w-10 h-10 rounded-full bg-yellow-100 dark:bg-yellow-900 flex items-center justify-center">
+        <div className="modal-header mb-4">
+          <div className="w-10 h-10 rounded-full bg-yellow-900/40 flex items-center justify-center">
             <span className="text-xl">🤔</span>
           </div>
           <div>
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
-              L'AI ha un dubbio
-            </h3>
-            <p className="text-sm text-gray-500 dark:text-gray-400">
+            <h3 className="text-lg font-semibold text-white">L'AI ha un dubbio</h3>
+            <p className="text-sm text-gray-400">
               Domanda {currentIndex + 1} di {questions.length}
             </p>
           </div>
@@ -48,7 +46,7 @@ export default function AmbiguityModal({ questions, onResolve, onSkip }) {
 
         {/* Question */}
         <div className="mb-6">
-          <p className="text-gray-700 dark:text-gray-300 mb-4">{currentQuestion.question}</p>
+          <p className="text-gray-300 mb-4">{currentQuestion.question}</p>
 
           {/* Options */}
           {currentQuestion.options ? (
@@ -62,12 +60,11 @@ export default function AmbiguityModal({ questions, onResolve, onSkip }) {
                   <button
                     key={idx}
                     onClick={() => handleAnswer(value)} // Passa il VALUE, non la label
-                    className="w-full text-left px-4 py-3 rounded-lg border-2 border-gray-200 dark:border-gray-700 
-                             hover:border-blue-500 dark:hover:border-blue-400 
-                             hover:bg-blue-50 dark:hover:bg-blue-900/20 
+                    className="w-full text-left px-4 py-3 rounded-lg border-2 border-slate-700 
+                             hover:border-primary-500 hover:bg-slate-700/40 
                              transition-colors"
                   >
-                    <span className="text-gray-900 dark:text-white font-medium">{label}</span>
+                    <span className="text-white font-medium">{label}</span>
                   </button>
                 )
               })}
@@ -77,8 +74,8 @@ export default function AmbiguityModal({ questions, onResolve, onSkip }) {
               type="text"
               autoFocus
               placeholder="La tua risposta..."
-              className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg 
-                       bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+              className="w-full px-4 py-2 border border-slate-600 rounded-lg 
+                       bg-slate-700 text-white"
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && e.target.value.trim()) {
                   handleAnswer(e.target.value.trim())
@@ -90,19 +87,14 @@ export default function AmbiguityModal({ questions, onResolve, onSkip }) {
 
         {/* Actions */}
         <div className="flex gap-3">
-          <button
-            onClick={onSkip}
-            className="flex-1 px-4 py-2 text-gray-600 dark:text-gray-400 
-                     hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
-          >
+          <button onClick={onSkip} className="flex-1 px-4 py-2 btn-ghost link-muted">
             Salta tutte
           </button>
           {!currentQuestion.options && (
             <button
               onClick={() => setCurrentIndex(currentIndex + 1)}
               disabled={isLast}
-              className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg 
-                       hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              className="flex-1 px-4 py-2 btn-primary"
             >
               {isLast ? 'Fine' : 'Prossima'}
             </button>

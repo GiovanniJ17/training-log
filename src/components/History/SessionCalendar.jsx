@@ -1,6 +1,6 @@
 import { format, startOfMonth, endOfMonth, isSameDay } from 'date-fns'
 import { it } from 'date-fns/locale'
-import { ChevronLeft, ChevronRight } from 'lucide-react'
+import { ChevronLeft, ChevronRight, CalendarDays } from 'lucide-react'
 
 export default function SessionCalendar({
   currentMonth,
@@ -39,24 +39,35 @@ export default function SessionCalendar({
   }
 
   return (
-    <div className="bg-slate-800 rounded-xl border border-slate-700 overflow-hidden">
-      {/* Header mese */}
-      <div className="bg-slate-900 px-6 py-4 flex items-center justify-between border-b border-slate-700">
-        <button onClick={onPrevMonth} className="p-2 hover:bg-slate-700 rounded-lg transition">
-          <ChevronLeft className="w-5 h-5 text-gray-400" />
-        </button>
-        <h2 className="text-lg font-bold text-white">
-          {format(currentMonth, 'MMMM yyyy', { locale: it })}
-        </h2>
-        <button onClick={onNextMonth} className="p-2 hover:bg-slate-700 rounded-lg transition">
-          <ChevronRight className="w-5 h-5 text-gray-400" />
-        </button>
+    <div className="widget-card widget-accent-emerald widget-shine-enhanced overflow-hidden card-hover-lift">
+      {/* Enhanced Header */}
+      <div className="relative bg-gradient-to-r from-emerald-600/20 via-teal-600/20 to-cyan-600/20 px-4 sm:px-6 py-4 border-b border-slate-700/50">
+        <div className="absolute inset-0 bg-gradient-to-r from-emerald-500/10 to-cyan-500/10 animate-gradient-x" />
+        <div className="relative flex items-center justify-between">
+          <button onClick={onPrevMonth} className="btn-icon btn-ghost hover:scale-110 transition-transform">
+            <ChevronLeft className="w-5 h-5 text-emerald-300" />
+          </button>
+          <div className="flex items-center gap-3">
+            <div className="icon-tile icon-tile-sm bg-gradient-to-br from-emerald-500/30 to-teal-500/30 border-emerald-500/40 text-emerald-300 shadow-lg">
+              <CalendarDays className="w-5 h-5" />
+            </div>
+            <h2 className="text-base sm:text-lg font-bold text-white">
+              {format(currentMonth, 'MMMM yyyy', { locale: it })}
+            </h2>
+          </div>
+          <button onClick={onNextMonth} className="btn-icon btn-ghost hover:scale-110 transition-transform">
+            <ChevronRight className="w-5 h-5 text-emerald-300" />
+          </button>
+        </div>
       </div>
 
       {/* Giorni della settimana */}
-      <div className="grid grid-cols-7 bg-slate-900/50 border-b border-slate-700">
+      <div className="panel-body grid grid-cols-7 bg-slate-900/50 border-b border-slate-700">
         {['Dom', 'Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab'].map((day) => (
-          <div key={day} className="px-3 py-2 text-center text-sm font-semibold text-gray-400">
+          <div
+            key={day}
+            className="px-2 sm:px-3 py-2 text-center text-xs sm:text-sm font-semibold text-gray-400"
+          >
             {day}
           </div>
         ))}
@@ -81,7 +92,7 @@ export default function SessionCalendar({
               key={idx}
               onClick={() => onDateClick(day)}
               disabled={loading}
-              className={`aspect-square p-2 border border-slate-700 flex flex-col items-start justify-start gap-0.5 text-xs transition-colors ${
+              className={`min-h-[56px] sm:aspect-square sm:min-h-0 p-2 border border-slate-800/80 flex flex-col items-start justify-start gap-1 text-xs transition-all duration-200 active:translate-y-px rounded-md hover:shadow-lg hover:shadow-slate-900/40 tap-ripple ${
                 !isCurrentMonth ? 'bg-slate-900/30' : 'bg-slate-900 hover:bg-slate-800'
               } ${ringClass}`}
             >

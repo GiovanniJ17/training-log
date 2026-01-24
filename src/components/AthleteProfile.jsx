@@ -1,5 +1,21 @@
 import { useState, useEffect, useCallback } from 'react'
-import { User, Trophy, AlertCircle, Zap, Target, CheckCircle, X } from 'lucide-react'
+import {
+  User,
+  Trophy,
+  AlertCircle,
+  Zap,
+  Target,
+  CheckCircle,
+  X,
+  CalendarDays,
+  Ruler,
+  Scale,
+  Activity
+} from 'lucide-react'
+import EmptyState from './ui/EmptyState'
+import { Card } from './ui/Card'
+import SectionTitle from './ui/SectionTitle'
+import LoadingSpinner from './LoadingSpinner'
 import {
   getAthleteProfile,
   updateAthleteProfile,
@@ -128,32 +144,30 @@ export default function AthleteProfile() {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="text-gray-400">Caricamento profilo...</div>
+        <LoadingSpinner message="Caricamento profilo..." />
       </div>
     )
   }
 
   if (!profile) {
     return (
-      <div className="max-w-6xl mx-auto p-6 space-y-6">
-        <div className="bg-slate-800 border border-slate-700 rounded-xl p-6 text-gray-200">
-          Profilo non ancora creato. Compila i dati atleta per vedere statistiche e PB personali.
+      <div className="max-w-6xl mx-auto p-4 sm:p-6 space-y-6 animate-pop">
+      <div className="glass-card widget-card widget-accent-blue widget-shine panel-body text-gray-200 text-center transition-shadow duration-200 hover:shadow-md">
+          <EmptyState
+            icon={<User className="w-6 h-6 text-primary-300" />}
+            title="Profilo non ancora creato"
+            description="Compila i dati atleta per vedere statistiche e PB personali."
+          />
         </div>
-        <button
-          onClick={handleEditProfile}
-          className="px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-lg transition-colors"
-        >
+        <button onClick={handleEditProfile} className="px-4 py-2 min-h-[44px] btn-primary">
           Crea profilo
         </button>
         {showEditProfile && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-            <div className="bg-slate-800 rounded-xl p-8 max-w-sm w-full">
-              <div className="flex items-center justify-between mb-6">
-                <h3 className="text-xl font-bold text-white">Modifica Profilo</h3>
-                <button
-                  onClick={() => setShowEditProfile(false)}
-                  className="text-gray-400 hover:text-white"
-                >
+            <div className="modal-shell p-5 sm:p-8 max-w-sm max-w-[95vw] max-h-[90vh] overflow-y-auto">
+              <div className="modal-header mb-6">
+                <SectionTitle title="Modifica Profilo" />
+                <button onClick={() => setShowEditProfile(false)} className="btn-icon btn-ghost">
                   <X className="w-6 h-6" />
                 </button>
               </div>
@@ -164,7 +178,7 @@ export default function AthleteProfile() {
                     type="text"
                     value={editName}
                     onChange={(e) => setEditName(e.target.value)}
-                    className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  className="w-full px-4 py-2 min-h-[44px] bg-slate-700 border border-slate-600 rounded-lg text-base text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
                     placeholder="Mario Rossi"
                   />
                 </div>
@@ -176,7 +190,7 @@ export default function AthleteProfile() {
                     type="date"
                     value={editBirthDate}
                     onChange={(e) => setEditBirthDate(e.target.value)}
-                    className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  className="w-full px-4 py-2 min-h-[44px] bg-slate-700 border border-slate-600 rounded-lg text-base text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
                   />
                 </div>
                 <div>
@@ -186,7 +200,7 @@ export default function AthleteProfile() {
                     step="0.1"
                     value={editWeight}
                     onChange={(e) => setEditWeight(e.target.value)}
-                    className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  className="w-full px-4 py-2 min-h-[44px] bg-slate-700 border border-slate-600 rounded-lg text-base text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
                     placeholder="65"
                   />
                 </div>
@@ -199,7 +213,7 @@ export default function AthleteProfile() {
                     step="1"
                     value={editHeight}
                     onChange={(e) => setEditHeight(e.target.value)}
-                    className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  className="w-full px-4 py-2 min-h-[44px] bg-slate-700 border border-slate-600 rounded-lg text-base text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
                     placeholder="173"
                   />
                 </div>
@@ -208,13 +222,13 @@ export default function AthleteProfile() {
                 <button
                   onClick={handleSaveProfile}
                   disabled={loading}
-                  className="flex-1 px-4 py-2 bg-primary-600 hover:bg-primary-700 disabled:bg-slate-700 text-white font-semibold rounded-lg transition-colors"
+                  className="flex-1 px-4 py-2 min-h-[44px] btn-primary"
                 >
                   Salva
                 </button>
                 <button
                   onClick={() => setShowEditProfile(false)}
-                  className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white font-medium rounded-lg transition-colors"
+                  className="px-4 py-2 min-h-[44px] btn-secondary"
                 >
                   Annulla
                 </button>
@@ -227,89 +241,109 @@ export default function AthleteProfile() {
   }
 
   return (
-    <div className="max-w-6xl mx-auto p-6 space-y-6">
-      {/* Header Profilo */}
-      <div className="bg-gradient-to-r from-slate-800 to-slate-900 rounded-xl p-8">
-        <div className="flex items-start justify-between">
-          <div className="flex gap-6 flex-1">
-            <div className="w-32 h-32 bg-primary-600 rounded-lg flex items-center justify-center">
-              <User className="w-16 h-16 text-white" />
+    <div className="app-shell py-2 sm:py-4 space-y-6 sm:space-y-8 animate-pop">
+      {/* Glassmorphism Header Profilo */}
+      <div className="glass-card p-6 sm:p-8">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div className="flex flex-col sm:flex-row gap-4 sm:gap-6 flex-1">
+            <div className="w-20 h-20 sm:w-28 sm:h-28 lg:w-32 lg:h-32 rounded-3xl bg-gradient-to-br from-primary-500 to-cyan-500 flex items-center justify-center shadow-lg">
+              <User className="w-10 h-10 sm:w-12 sm:h-12 lg:w-16 lg:h-16 text-white" />
             </div>
             <div className="flex-1">
-              <h1 className="text-4xl font-bold text-white mb-2">{profile.name}</h1>
-              <p className="text-primary-300 text-lg mb-4">{profile.sport_specialization}</p>
-              <div className="grid grid-cols-2 gap-4 text-sm">
-                <div>
-                  <span className="text-gray-400">Data Nascita</span>
-                  <p className="text-white font-medium">
-                    {profile.birth_date
-                      ? new Date(profile.birth_date).toLocaleDateString('it-IT')
-                      : '-'}
-                    {profile.birth_date && (
-                      <span className="text-gray-400">
-                        {' '}
-                        ({calculateAge(profile.birth_date)} anni)
-                      </span>
-                    )}
-                  </p>
+              <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-white mb-2">
+                {profile.name}
+              </h1>
+              <p className="text-slate-300 text-base sm:text-lg lg:text-xl font-medium mb-6">
+                {profile.sport_specialization}
+              </p>
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 text-sm">
+                <div className="glass-panel p-4 flex items-center gap-3 rounded-2xl">
+                  <div className="w-10 h-10 rounded-xl bg-sky-500/20 flex items-center justify-center">
+                    <CalendarDays className="w-5 h-5 text-sky-300" />
+                  </div>
+                  <div>
+                    <div className="text-xs text-slate-400 mb-1 uppercase tracking-wider">Data Nascita</div>
+                    <p className="text-white font-semibold text-sm">
+                      {profile.birth_date
+                        ? new Date(profile.birth_date).toLocaleDateString('it-IT')
+                        : '-'}
+                      {profile.birth_date && (
+                        <span className="text-slate-400 ml-1 text-xs">
+                          ({calculateAge(profile.birth_date)} anni)
+                        </span>
+                      )}
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <span className="text-gray-400">Peso</span>
-                  <p className="text-white font-medium">
-                    {profile.current_weight_kg != null ? `${profile.current_weight_kg} kg` : '-'}
-                  </p>
+                <div className="glass-panel p-4 flex items-center gap-3 rounded-2xl">
+                  <div className="w-10 h-10 rounded-xl bg-emerald-500/20 flex items-center justify-center">
+                    <Scale className="w-5 h-5 text-emerald-300" />
+                  </div>
+                  <div>
+                    <div className="text-xs text-slate-400 mb-1 uppercase tracking-wider">Peso</div>
+                    <p className="text-white font-semibold text-sm">
+                      {profile.current_weight_kg != null ? `${profile.current_weight_kg} kg` : '-'}
+                    </p>
+                  </div>
                 </div>
-                {profile.height_cm && (
-                  <>
-                    <div>
-                      <span className="text-gray-400">Altezza</span>
-                      <p className="text-white font-medium">{profile.height_cm} cm</p>
-                    </div>
-                    <div>
-                      <span className="text-gray-400">BMI</span>
-                      <p className="text-white font-medium">
-                        {calculateBMI(profile.current_weight_kg, profile.height_cm)}
-                      </p>
-                    </div>
-                  </>
-                )}
+                <div className="glass-panel p-4 flex items-center gap-3 rounded-2xl">
+                  <div className="w-10 h-10 rounded-xl bg-amber-500/20 flex items-center justify-center">
+                    <Ruler className="w-5 h-5 text-amber-300" />
+                  </div>
+                  <div>
+                    <div className="text-xs text-slate-400 mb-1 uppercase tracking-wider">Altezza</div>
+                    <p className="text-white font-semibold text-sm">
+                      {profile.height_cm ? `${profile.height_cm} cm` : '-'}
+                    </p>
+                  </div>
+                </div>
+                <div className="glass-panel p-4 flex items-center gap-3 rounded-2xl">
+                  <div className="w-10 h-10 rounded-xl bg-rose-500/20 flex items-center justify-center">
+                    <Activity className="w-5 h-5 text-rose-300" />
+                  </div>
+                  <div>
+                    <div className="text-xs text-slate-400 mb-1 uppercase tracking-wider">BMI</div>
+                    <p className="text-white font-semibold text-sm">
+                      {profile.height_cm
+                        ? calculateBMI(profile.current_weight_kg, profile.height_cm)
+                        : '-'}
+                    </p>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
-          <button
-            onClick={handleEditProfile}
-            className="px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-lg transition-colors"
-          >
+          <button onClick={handleEditProfile} className="px-4 py-2 min-h-[44px] btn-primary">
             Modifica
           </button>
         </div>
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-2 border-b border-slate-700">
-        {[
-          { id: 'overview', label: 'Overview', icon: Trophy },
-          { id: 'race-pbs', label: 'PB Gara', icon: Target },
-          { id: 'training-pbs', label: 'PB Allenamento', icon: Zap },
-          { id: 'strength-pbs', label: 'Massimali', icon: AlertCircle },
-          { id: 'injuries', label: 'Infortuni', icon: AlertCircle }
-        ].map((tab) => {
-          const Icon = tab.icon
-          return (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={`flex items-center gap-2 px-4 py-3 border-b-2 transition-colors ${
-                activeTab === tab.id
-                  ? 'border-primary-600 text-primary-400'
-                  : 'border-transparent text-gray-400 hover:text-white'
-              }`}
-            >
-              <Icon className="w-4 h-4" />
-              {tab.label}
-            </button>
-          )
-        })}
+      <div className="widget-card widget-accent-blue widget-shine p-2 sm:p-3">
+        <div className="flex gap-2 overflow-x-auto">
+          {[
+            { id: 'overview', label: 'Overview', icon: Trophy },
+            { id: 'race-pbs', label: 'PB Gara', icon: Target },
+            { id: 'training-pbs', label: 'PB Allenamento', icon: Zap },
+            { id: 'strength-pbs', label: 'Massimali', icon: AlertCircle },
+            { id: 'injuries', label: 'Infortuni', icon: AlertCircle }
+          ].map((tab) => {
+            const Icon = tab.icon
+            return (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={`tab-pill min-h-[44px] whitespace-nowrap ${
+                  activeTab === tab.id ? 'tab-pill-active' : ''
+                }`}
+              >
+                <Icon className="w-4 h-4" />
+                {tab.label}
+              </button>
+            )
+          })}
+        </div>
       </div>
 
       {/* Contenuto Tab */}
@@ -320,11 +354,12 @@ export default function AthleteProfile() {
             {/* Best Races - Show all unique distances */}
             {personalBests.raceRecords.length > 0 && (
               <div>
-                <h3 className="text-xl font-semibold text-white mb-4 flex items-center gap-2">
-                  <Target className="w-5 h-5 text-primary-400" />
-                  Migliori Performance Gara
-                </h3>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <SectionTitle
+                  title="Migliori Performance Gara"
+                  icon={<Target className="w-5 h-5 text-primary-400" />}
+                  className="mb-4"
+                />
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                   {personalBests.raceRecords
                     .reduce((acc, record) => {
                       const existing = acc.find((r) => r.distance_m === record.distance_m)
@@ -335,20 +370,25 @@ export default function AthleteProfile() {
                     }, [])
                     .sort((a, b) => a.distance_m - b.distance_m)
                     .map((record) => (
-                      <div key={record.distance_m} className="bg-slate-800 rounded-xl p-6">
+                      <Card
+                        key={record.distance_m}
+                        className="p-4 sm:p-6 widget-card widget-accent-blue widget-shine"
+                      >
                         <div className="space-y-3">
                           <div>
                             <p className="text-sm text-gray-400">Distanza</p>
-                            <p className="text-xl font-bold text-white">{record.distance_m}m</p>
+                            <p className="text-lg sm:text-xl font-bold text-white">
+                              {record.distance_m}m
+                            </p>
                           </div>
                           <div>
                             <p className="text-sm text-gray-400">Tempo</p>
-                            <p className="text-2xl font-bold text-primary-400">
+                            <p className="text-xl sm:text-2xl font-bold text-primary-400">
                               {formatTime(record.time_s)}
                             </p>
                           </div>
                         </div>
-                      </div>
+                      </Card>
                     ))}
                 </div>
               </div>
@@ -357,26 +397,32 @@ export default function AthleteProfile() {
             {/* Best Training Record */}
             {personalBests.trainingRecords.length > 0 && (
               <div>
-                <h3 className="text-xl font-semibold text-white mb-4 flex items-center gap-2">
-                  <Zap className="w-5 h-5 text-primary-400" />
-                  Migliori Performance Allenamento
-                </h3>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <SectionTitle
+                  title="Migliori Performance Allenamento"
+                  icon={<Zap className="w-5 h-5 text-primary-400" />}
+                  className="mb-4"
+                />
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                   {personalBests.trainingRecords.slice(0, 3).map((record) => (
-                    <div key={record.id} className="bg-slate-800 rounded-xl p-6">
+                    <Card
+                      key={record.id}
+                      className="p-4 sm:p-6 widget-card widget-accent-emerald widget-shine"
+                    >
                       <div className="space-y-3">
                         <div>
                           <p className="text-sm text-gray-400">Esercizio</p>
-                          <p className="text-xl font-bold text-white">{record.exercise_name}</p>
+                          <p className="text-lg sm:text-xl font-bold text-white">
+                            {record.exercise_name}
+                          </p>
                         </div>
                         <div>
                           <p className="text-sm text-gray-400">Performance</p>
-                          <p className="text-2xl font-bold text-primary-400">
+                          <p className="text-xl sm:text-2xl font-bold text-primary-400">
                             {record.performance_value} {record.performance_unit}
                           </p>
                         </div>
                       </div>
-                    </div>
+                    </Card>
                   ))}
                 </div>
               </div>
@@ -385,11 +431,12 @@ export default function AthleteProfile() {
             {/* Best Strength */}
             {personalBests.strengthRecords.length > 0 && (
               <div>
-                <h3 className="text-xl font-semibold text-white mb-4 flex items-center gap-2">
-                  <AlertCircle className="w-5 h-5 text-primary-400" />
-                  Massimali Forza
-                </h3>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <SectionTitle
+                  title="Massimali Forza"
+                  icon={<AlertCircle className="w-5 h-5 text-primary-400" />}
+                  className="mb-4"
+                />
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                   {personalBests.strengthRecords
                     .reduce((acc, record) => {
                       const existing = acc.find((r) => r.category === record.category)
@@ -400,20 +447,25 @@ export default function AthleteProfile() {
                     }, [])
                     .sort((a, b) => b.weight_kg - a.weight_kg)
                     .map((record) => (
-                      <div key={record.id} className="bg-slate-800 rounded-xl p-6">
+                      <Card
+                        key={record.id}
+                        className="p-4 sm:p-6 widget-card widget-accent-amber widget-shine"
+                      >
                         <div className="space-y-3">
                           <div>
                             <p className="text-sm text-gray-400">Esercizio</p>
-                            <p className="text-xl font-bold text-white">{record.exercise_name}</p>
+                            <p className="text-lg sm:text-xl font-bold text-white">
+                              {record.exercise_name}
+                            </p>
                           </div>
                           <div>
                             <p className="text-sm text-gray-400">Peso</p>
-                            <p className="text-2xl font-bold text-primary-400">
+                            <p className="text-xl sm:text-2xl font-bold text-primary-400">
                               {record.weight_kg} kg
                             </p>
                           </div>
                         </div>
-                      </div>
+                      </Card>
                     ))}
                 </div>
               </div>
@@ -423,44 +475,50 @@ export default function AthleteProfile() {
 
         {/* Race PBs */}
         {activeTab === 'race-pbs' && personalBests && (
-          <div className="bg-slate-800 rounded-xl overflow-hidden">
-            <div className="p-6 border-b border-slate-700">
-              <h3 className="text-lg font-semibold text-white">Record Personali - Gara</h3>
+          <div className="glass-card widget-card widget-accent-blue widget-shine overflow-hidden transition-shadow duration-200 hover:shadow-md">
+            <div className="panel-header">
+              <SectionTitle title="Record Personali - Gara" />
             </div>
-            <div className="divide-y divide-slate-700">
+            <div className="panel-body">
               {personalBests.raceRecords.length === 0 ? (
-                <div className="p-6 text-center text-gray-400">Nessun record personale</div>
+                <div className="panel-body text-center text-gray-400 transition-shadow duration-200 hover:shadow-md">
+                  Nessun record personale
+                </div>
               ) : (
-                personalBests.raceRecords.map((record) => (
-                  <div key={record.id} className="p-6 hover:bg-slate-700/50 transition-colors">
-                    <div className="grid grid-cols-4 gap-4 items-start">
-                      <div>
-                        <p className="text-sm text-gray-400">Distanza</p>
-                        <p className="text-lg font-bold text-white">{record.distance_m}m</p>
-                      </div>
-                      <div>
-                        <p className="text-sm text-gray-400">Tempo</p>
+                <div className="card-grid-2">
+                  {personalBests.raceRecords.map((record) => (
+                    <div key={record.id} className="tile tile-accent-blue tap-ripple">
+                      <div className="flex items-center justify-between mb-2">
                         <div className="flex items-center gap-2">
-                          <p className="text-lg font-bold text-primary-400">
-                            {formatTime(record.time_s)}
-                          </p>
-                          {isNewRecord(record) && (
-                            <span className="px-2 py-1 bg-green-600 text-white text-xs font-bold rounded">
-                              NUOVO
-                            </span>
-                          )}
+                          <div className="icon-tile icon-tile-sm text-sky-300">
+                            <Target className="w-4 h-4" />
+                          </div>
+                          <span className="micro-title">{record.distance_m}m</span>
                         </div>
+                        {isNewRecord(record) && (
+                          <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-600/80 text-white font-semibold">
+                            NUOVO
+                          </span>
+                        )}
                       </div>
-                      <div>
-                        <p className="text-sm text-gray-400">RPE</p>
-                        <p className="text-lg font-bold text-white">{record.rpe || '-'}</p>
+                      <div className="card-stack text-sm text-gray-200">
+                        <div className="flex items-center justify-between">
+                          <span className="text-slate-400">Tempo</span>
+                          <span className="font-semibold text-primary-300">
+                            {formatTime(record.time_s)}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-slate-400">RPE</span>
+                          <span className="font-semibold">{record.rpe || '-'}</span>
+                        </div>
+                        {record.competition_name && (
+                          <div className="text-xs text-slate-400">{record.competition_name}</div>
+                        )}
                       </div>
                     </div>
-                    {record.competition_name && (
-                      <p className="text-sm text-gray-400 mt-2">{record.competition_name}</p>
-                    )}
-                  </div>
-                ))
+                  ))}
+                </div>
               )}
             </div>
           </div>
@@ -468,48 +526,53 @@ export default function AthleteProfile() {
 
         {/* Training PBs */}
         {activeTab === 'training-pbs' && personalBests && (
-          <div className="bg-slate-800 rounded-xl overflow-hidden">
-            <div className="p-6 border-b border-slate-700">
-              <h3 className="text-lg font-semibold text-white">Record Personali - Allenamento</h3>
+          <div className="glass-card widget-card widget-accent-emerald widget-shine overflow-hidden transition-shadow duration-200 hover:shadow-md">
+            <div className="panel-header">
+              <SectionTitle title="Record Personali - Allenamento" />
             </div>
-            <div className="divide-y divide-slate-700">
+            <div className="panel-body">
               {personalBests.trainingRecords.length === 0 ? (
-                <div className="p-6 text-center text-gray-400">Nessun record personale</div>
+                <div className="panel-body text-center text-gray-400 transition-shadow duration-200 hover:shadow-md">
+                  Nessun record personale
+                </div>
               ) : (
-                personalBests.trainingRecords.map((record) => (
-                  <div key={record.id} className="p-6 hover:bg-slate-700/50 transition-colors">
-                    {' '}
-                    {isNewRecord(record) && (
-                      <div className="mb-2">
-                        <span className="text-xs px-2 py-1 rounded-full bg-primary-600 text-white font-medium">
-                          NUOVO
-                        </span>
+                <div className="card-grid-2">
+                  {personalBests.trainingRecords.map((record) => (
+                    <div key={record.id} className="tile tile-accent-emerald tap-ripple">
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-2">
+                          <div className="icon-tile icon-tile-sm text-emerald-300">
+                            <Zap className="w-4 h-4" />
+                          </div>
+                          <span className="micro-title">{record.exercise_name}</span>
+                        </div>
+                        {isNewRecord(record) && (
+                          <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-600/80 text-white font-semibold">
+                            NUOVO
+                          </span>
+                        )}
                       </div>
-                    )}{' '}
-                    <div className="grid grid-cols-4 gap-4">
-                      <div>
-                        <p className="text-sm text-gray-400">Esercizio</p>
-                        <p className="text-lg font-bold text-white">{record.exercise_name}</p>
-                      </div>
-                      <div>
-                        <p className="text-sm text-gray-400">Tipo</p>
-                        <p className="text-lg font-bold text-primary-400 capitalize">
-                          {record.exercise_type}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-sm text-gray-400">Performance</p>
-                        <p className="text-lg font-bold text-white">
-                          {record.performance_value} {record.performance_unit}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-sm text-gray-400">RPE</p>
-                        <p className="text-lg font-bold text-white">{record.rpe || '-'}</p>
+                      <div className="card-stack text-sm text-gray-200">
+                        <div className="flex items-center justify-between">
+                          <span className="text-slate-400">Tipo</span>
+                          <span className="font-semibold text-emerald-300 capitalize">
+                            {record.exercise_type}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-slate-400">Performance</span>
+                          <span className="font-semibold">
+                            {record.performance_value} {record.performance_unit}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-slate-400">RPE</span>
+                          <span className="font-semibold">{record.rpe || '-'}</span>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))
+                  ))}
+                </div>
               )}
             </div>
           </div>
@@ -517,44 +580,50 @@ export default function AthleteProfile() {
 
         {/* Strength Records */}
         {activeTab === 'strength-pbs' && personalBests && (
-          <div className="bg-slate-800 rounded-xl overflow-hidden">
-            <div className="p-6 border-b border-slate-700">
-              <h3 className="text-lg font-semibold text-white">Massimali di Forza</h3>
+          <div className="glass-card widget-card widget-accent-amber widget-shine overflow-hidden transition-shadow duration-200 hover:shadow-md">
+            <div className="panel-header">
+              <SectionTitle title="Massimali di Forza" />
             </div>
-            <div className="divide-y divide-slate-700">
+            <div className="panel-body">
               {personalBests.strengthRecords.length === 0 ? (
-                <div className="p-6 text-center text-gray-400">Nessun massimale registrato</div>
+                <div className="panel-body text-center text-gray-400 transition-shadow duration-200 hover:shadow-md">
+                  Nessun massimale registrato
+                </div>
               ) : (
-                personalBests.strengthRecords.map((record) => (
-                  <div key={record.id} className="p-6 hover:bg-slate-700/50 transition-colors">
-                    <div className="grid grid-cols-5 gap-4">
-                      <div>
-                        <p className="text-sm text-gray-400">Esercizio</p>
-                        <p className="text-lg font-bold text-white">{record.exercise_name}</p>
+                <div className="card-grid-2">
+                  {personalBests.strengthRecords.map((record) => (
+                    <div key={record.id} className="tile tile-accent-amber tap-ripple">
+                      <div className="flex items-center gap-2 mb-2">
+                        <div className="icon-tile icon-tile-sm text-amber-300">
+                          <AlertCircle className="w-4 h-4" />
+                        </div>
+                        <span className="micro-title">{record.exercise_name}</span>
                       </div>
-                      <div>
-                        <p className="text-sm text-gray-400">Categoria</p>
-                        <p className="text-lg font-bold text-primary-400 capitalize">
-                          {record.category}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-sm text-gray-400">Peso</p>
-                        <p className="text-lg font-bold text-white">{record.weight_kg} kg</p>
-                      </div>
-                      <div>
-                        <p className="text-sm text-gray-400">Reps</p>
-                        <p className="text-lg font-bold text-white">{record.reps}</p>
-                      </div>
-                      <div>
-                        <p className="text-sm text-gray-400">% BW</p>
-                        <p className="text-lg font-bold text-primary-400">
-                          {record.percentage_of_bodyweight}%
-                        </p>
+                      <div className="card-stack text-sm text-gray-200">
+                        <div className="flex items-center justify-between">
+                          <span className="text-slate-400">Categoria</span>
+                          <span className="font-semibold text-amber-300 capitalize">
+                            {record.category}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-slate-400">Peso</span>
+                          <span className="font-semibold">{record.weight_kg} kg</span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-slate-400">Reps</span>
+                          <span className="font-semibold">{record.reps}</span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-slate-400">% BW</span>
+                          <span className="font-semibold text-amber-300">
+                            {record.percentage_of_bodyweight}%
+                          </span>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))
+                  ))}
+                </div>
               )}
             </div>
           </div>
@@ -562,15 +631,13 @@ export default function AthleteProfile() {
 
         {/* Injuries */}
         {activeTab === 'injuries' && (
-          <div className="bg-slate-800 rounded-xl overflow-hidden">
-            <div className="p-6 border-b border-slate-700 flex items-center justify-between">
-              <h3 className="text-lg font-semibold text-white">Storico Infortuni</h3>
+          <div className="glass-card widget-card widget-accent-pink widget-shine overflow-hidden transition-shadow duration-200 hover:shadow-md">
+            <div className="panel-header">
+              <SectionTitle title="Storico Infortuni" />
               <button
                 onClick={() => setShowOnlyActiveInjuries(!showOnlyActiveInjuries)}
-                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                  showOnlyActiveInjuries
-                    ? 'bg-primary-600 text-white'
-                    : 'bg-slate-700 text-gray-300 hover:bg-slate-600'
+                className={`px-4 py-2 text-sm ${
+                  showOnlyActiveInjuries ? 'btn-primary' : 'btn-ghost link-muted'
                 }`}
               >
                 {showOnlyActiveInjuries ? 'Mostra tutti' : 'Solo attivi'}
@@ -578,12 +645,14 @@ export default function AthleteProfile() {
             </div>
             <div className="divide-y divide-slate-700">
               {injuries.length === 0 ? (
-                <div className="p-6 text-center text-gray-400">Nessun infortunio registrato</div>
+                <div className="panel-body text-center text-gray-400 transition-shadow duration-200 hover:shadow-md">
+                  Nessun infortunio registrato
+                </div>
               ) : (
                 injuries
                   .filter((injury) => !showOnlyActiveInjuries || !injury.end_date)
                   .map((injury) => (
-                    <div key={injury.id} className="p-6 hover:bg-slate-700/50 transition-colors">
+                    <div key={injury.id} className="panel-body hover:bg-slate-700/50 transition-colors">
                       <div className="flex items-start justify-between mb-3">
                         <div className="flex-1">
                           <div className="flex items-center gap-3 mb-2">
@@ -623,7 +692,7 @@ export default function AthleteProfile() {
                               setEndDate(new Date().toISOString().split('T')[0])
                               setShowInjuryModal(true)
                             }}
-                            className="ml-4 px-3 py-1 bg-green-600 hover:bg-green-700 text-white text-sm rounded-lg transition-colors flex items-center gap-2"
+                            className="ml-4 px-3 py-1 btn-success text-sm flex items-center gap-2"
                           >
                             <CheckCircle className="w-4 h-4" />
                             Segna come guarito
@@ -671,16 +740,16 @@ export default function AthleteProfile() {
       {/* Modale chiusura infortunio */}
       {showInjuryModal && selectedInjury && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-slate-800 rounded-xl max-w-md w-full p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-xl font-bold text-white">Chiudi Infortunio</h3>
+          <div className="modal-shell max-w-md max-w-[95vw] max-h-[90vh] overflow-y-auto p-5 sm:p-6">
+            <div className="modal-header mb-4">
+              <SectionTitle title="Chiudi Infortunio" />
               <button
                 onClick={() => {
                   setShowInjuryModal(false)
                   setSelectedInjury(null)
                   setEndDate('')
                 }}
-                className="text-gray-400 hover:text-white"
+                className="btn-icon btn-ghost"
               >
                 <X className="w-6 h-6" />
               </button>
@@ -704,7 +773,7 @@ export default function AthleteProfile() {
                 value={endDate}
                 onChange={(e) => setEndDate(e.target.value)}
                 max={new Date().toISOString().split('T')[0]}
-                className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
+                className="w-full px-4 py-2 min-h-[44px] bg-slate-700 border border-slate-600 rounded-lg text-base text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
               />
             </div>
 
@@ -712,7 +781,7 @@ export default function AthleteProfile() {
               <button
                 onClick={handleResolveInjury}
                 disabled={!endDate || loading}
-                className="flex-1 px-4 py-2 bg-green-600 hover:bg-green-700 disabled:bg-slate-700 text-white font-semibold rounded-lg transition-colors"
+                className="flex-1 px-4 py-2 min-h-[44px] btn-success"
               >
                 Conferma
               </button>
@@ -722,7 +791,7 @@ export default function AthleteProfile() {
                   setSelectedInjury(null)
                   setEndDate('')
                 }}
-                className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white font-medium rounded-lg transition-colors"
+                className="px-4 py-2 min-h-[44px] btn-secondary"
               >
                 Annulla
               </button>
@@ -734,13 +803,10 @@ export default function AthleteProfile() {
       {/* Modal Modifica Profilo */}
       {showEditProfile && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-slate-800 rounded-xl p-8 max-w-sm w-full">
-            <div className="flex items-center justify-between mb-6">
-              <h3 className="text-xl font-bold text-white">Modifica Profilo</h3>
-              <button
-                onClick={() => setShowEditProfile(false)}
-                className="text-gray-400 hover:text-white"
-              >
+          <div className="modal-shell p-5 sm:p-8 max-w-sm max-w-[95vw] max-h-[90vh] overflow-y-auto">
+            <div className="modal-header mb-6">
+              <SectionTitle title="Modifica Profilo" />
+              <button onClick={() => setShowEditProfile(false)} className="btn-icon btn-ghost">
                 <X className="w-6 h-6" />
               </button>
             </div>
@@ -752,7 +818,7 @@ export default function AthleteProfile() {
                   type="text"
                   value={editName}
                   onChange={(e) => setEditName(e.target.value)}
-                  className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  className="w-full px-4 py-2 min-h-[44px] bg-slate-700 border border-slate-600 rounded-lg text-base text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
                   placeholder="Mario Rossi"
                 />
               </div>
@@ -765,7 +831,7 @@ export default function AthleteProfile() {
                   type="date"
                   value={editBirthDate}
                   onChange={(e) => setEditBirthDate(e.target.value)}
-                  className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  className="w-full px-4 py-2 min-h-[44px] bg-slate-700 border border-slate-600 rounded-lg text-base text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
                 />
               </div>
 
@@ -776,7 +842,7 @@ export default function AthleteProfile() {
                   step="0.1"
                   value={editWeight}
                   onChange={(e) => setEditWeight(e.target.value)}
-                  className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  className="w-full px-4 py-2 min-h-[44px] bg-slate-700 border border-slate-600 rounded-lg text-base text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
                   placeholder="65"
                 />
               </div>
@@ -788,7 +854,7 @@ export default function AthleteProfile() {
                   step="1"
                   value={editHeight}
                   onChange={(e) => setEditHeight(e.target.value)}
-                  className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  className="w-full px-4 py-2 min-h-[44px] bg-slate-700 border border-slate-600 rounded-lg text-base text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
                   placeholder="173"
                 />
               </div>
@@ -798,13 +864,13 @@ export default function AthleteProfile() {
               <button
                 onClick={handleSaveProfile}
                 disabled={loading}
-                className="flex-1 px-4 py-2 bg-primary-600 hover:bg-primary-700 disabled:bg-slate-700 text-white font-semibold rounded-lg transition-colors"
+                className="flex-1 px-4 py-2 min-h-[44px] btn-primary"
               >
                 Salva
               </button>
               <button
                 onClick={() => setShowEditProfile(false)}
-                className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white font-medium rounded-lg transition-colors"
+                className="px-4 py-2 min-h-[44px] btn-secondary"
               >
                 Annulla
               </button>

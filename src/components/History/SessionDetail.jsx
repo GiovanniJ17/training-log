@@ -1,6 +1,10 @@
 import { format } from 'date-fns'
 import { it } from 'date-fns/locale'
-import { Trash2, MapPin } from 'lucide-react'
+import { Trash2, MapPin, CalendarDays, Activity, Dumbbell, Footprints, Flag, Timer, Zap, Smile } from 'lucide-react'
+import { Card, CardBody } from '../ui/Card'
+import EmptyState from '../ui/EmptyState'
+import SectionTitle, { Subheader } from '../ui/SectionTitle'
+import LoadingSpinner from '../LoadingSpinner'
 
 export default function SessionDetail({ date, sessions, onDelete, loading }) {
   const getTypeColor = (type) => {
@@ -28,6 +32,27 @@ export default function SessionDetail({ date, sessions, onDelete, loading }) {
     altro: 'Altro'
   }
 
+  const getTypeIcon = (type) => {
+    switch (type) {
+      case 'pista':
+        return { Icon: Zap, tint: 'text-sky-300' }
+      case 'palestra':
+        return { Icon: Dumbbell, tint: 'text-purple-300' }
+      case 'strada':
+        return { Icon: Footprints, tint: 'text-emerald-300' }
+      case 'gara':
+        return { Icon: Flag, tint: 'text-rose-300' }
+      case 'test':
+        return { Icon: Timer, tint: 'text-amber-300' }
+      case 'scarico':
+        return { Icon: Activity, tint: 'text-cyan-300' }
+      case 'recupero':
+        return { Icon: Activity, tint: 'text-teal-300' }
+      default:
+        return { Icon: Activity, tint: 'text-slate-300' }
+    }
+  }
+
   const buildDisplayTitle = (session) => {
     const firstNoteLine = session.notes?.split('\n')?.[0]?.trim()
     return firstNoteLine || ''
@@ -35,31 +60,46 @@ export default function SessionDetail({ date, sessions, onDelete, loading }) {
 
   if (loading) {
     return (
-      <div className="bg-slate-800 rounded-xl border border-slate-700 p-8 text-center">
-        <p className="text-gray-400">Caricamento...</p>
-      </div>
+      <Card className="text-center widget-card widget-accent-blue widget-shine">
+        <CardBody className="py-8">
+          <LoadingSpinner message="Caricamento..." />
+        </CardBody>
+      </Card>
     )
   }
 
   return (
     <div className="space-y-4">
-      <h3 className="text-xl font-bold text-white mb-4">
-        {format(date, 'd MMMM yyyy', { locale: it })}
-      </h3>
+      <SectionTitle
+        title={format(date, 'd MMMM yyyy', { locale: it })}
+        icon={<CalendarDays className="w-5 h-5" />}
+        className="mb-2"
+      />
 
       {sessions.length === 0 ? (
-        <div className="bg-slate-800 rounded-xl border border-slate-700 p-8 text-center">
-          <p className="text-gray-400">Nessuna sessione registrata per questo giorno</p>
-        </div>
+        <Card className="text-center widget-card widget-accent-blue widget-shine">
+          <CardBody className="py-8">
+            <EmptyState
+              icon={<CalendarDays className="w-6 h-6 text-primary-300" />}
+              title="Nessuna sessione registrata per questo giorno"
+              description="Prova a selezionare un'altra data o aggiungere un allenamento."
+            />
+          </CardBody>
+        </Card>
       ) : (
         sessions.map((session) => (
-          <div
-            key={session.id}
-            className="bg-slate-800 rounded-xl border border-slate-700 p-6 hover:border-slate-600 transition"
-          >
+          <Card key={session.id} className="p-0 widget-card widget-accent-emerald widget-shine tap-ripple animate-float-in">
             {/* Header Sessione */}
-            <div className="flex items-start justify-between mb-4">
+            <div className="panel-body flex items-start justify-between">
               <div className="flex items-center gap-3 flex-1">
+                {(() => {
+                  const { Icon, tint } = getTypeIcon(session.type)
+                  return (
+                    <div className={`icon-tile icon-tile-sm ${tint}`}>
+                      <Icon className="w-4 h-4" />
+                    </div>
+                  )
+                })()}
                 <div
                   className={`${getTypeColor(session.type)} px-3 py-1 rounded-full text-white text-sm font-medium`}
                 >
@@ -73,7 +113,7 @@ export default function SessionDetail({ date, sessions, onDelete, loading }) {
               <div className="flex gap-2">
                 <button
                   onClick={() => onDelete(session.id)}
-                  className="p-2 hover:bg-slate-700 rounded-lg transition text-red-400 hover:text-red-300"
+                  className="btn-icon btn-ghost text-red-400 hover:text-red-300"
                   title="Elimina"
                 >
                   <Trash2 className="w-4 h-4" />
@@ -82,16 +122,23 @@ export default function SessionDetail({ date, sessions, onDelete, loading }) {
             </div>
 
             {/* Metadata */}
-            <div className="grid grid-cols-3 gap-4 mb-4 pb-4 border-b border-slate-700">
+            <div className="panel-body grid grid-cols-1 sm:grid-cols-3 gap-3 border-b border-slate-700">
               {session.rpe !== null && (
-                <div>
-                  <p className="text-xs text-gray-500 uppercase">RPE</p>
-                  <p className="text-lg font-bold text-white">{session.rpe}/10</p>
+                <div className="glass-panel p-3 flex items-center gap-3">
+                  <div className="icon-tile icon-tile-sm text-emerald-300">
+                    <Activity className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-500 uppercase">RPE</p>
+                    <p className="text-lg font-bold text-white">{session.rpe}/10</p>
+                  </div>
                 </div>
               )}
               {session.location && (
-                <div className="flex items-start gap-2">
-                  <MapPin className="w-4 h-4 text-gray-400 mt-1" />
+                <div className="glass-panel p-3 flex items-start gap-2">
+                  <div className="icon-tile icon-tile-sm text-sky-300">
+                    <MapPin className="w-4 h-4" />
+                  </div>
                   <div>
                     <p className="text-xs text-gray-500 uppercase">Luogo</p>
                     <p className="text-sm text-white">{session.location}</p>
@@ -99,31 +146,46 @@ export default function SessionDetail({ date, sessions, onDelete, loading }) {
                 </div>
               )}
               {session.feeling && (
-                <div>
-                  <p className="text-xs text-gray-500 uppercase">Condizione</p>
-                  <p className="text-sm text-white">{session.feeling}</p>
+                <div className="glass-panel p-3 flex items-center gap-3">
+                  <div className="icon-tile icon-tile-sm text-amber-300">
+                    <Smile className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-500 uppercase">Condizione</p>
+                    <p className="text-sm text-white">{session.feeling}</p>
+                  </div>
                 </div>
               )}
             </div>
 
             {/* Note */}
             {session.notes && (
-              <div className="mb-4">
-                <p className="text-xs text-gray-500 uppercase mb-2">Note</p>
+              <div className="panel-body">
+                <div className="flex items-center gap-2 mb-2">
+                  <div className="icon-tile icon-tile-sm text-slate-300">
+                    <Activity className="w-4 h-4" />
+                  </div>
+                  <p className="text-xs text-gray-500 uppercase">Note</p>
+                </div>
                 <p className="text-sm text-gray-300 whitespace-pre-wrap">{session.notes}</p>
               </div>
             )}
 
             {/* Gruppi ed esercizi */}
             {session.groups && session.groups.length > 0 ? (
-              <div className="space-y-3">
+              <div className="panel-body card-grid-2">
                 {session.groups.map((group) => (
                   <div
                     key={group.id}
-                    className="bg-slate-900/60 border border-slate-700 rounded-lg p-4"
+                    className="glass-panel p-4 transition-all duration-200 hover:border-slate-600"
                   >
                     <div className="flex items-center justify-between mb-2">
-                      <p className="text-sm font-semibold text-white">{group.name || 'Gruppo'}</p>
+                      <div className="flex items-center gap-2">
+                        <div className="icon-tile icon-tile-sm text-sky-300">
+                          <Dumbbell className="w-4 h-4" />
+                        </div>
+                        <p className="text-sm font-semibold text-white">{group.name || 'Gruppo'}</p>
+                      </div>
                       {group.notes && <p className="text-xs text-gray-400">{group.notes}</p>}
                     </div>
                     {group.sets && group.sets.length > 0 ? (
@@ -157,11 +219,11 @@ export default function SessionDetail({ date, sessions, onDelete, loading }) {
                 ))}
               </div>
             ) : (
-              <div className="text-xs text-gray-500">
+              <div className="panel-body text-xs text-gray-500">
                 Esercizi non ancora caricati nel dettaglio
               </div>
             )}
-          </div>
+          </Card>
         ))
       )}
     </div>

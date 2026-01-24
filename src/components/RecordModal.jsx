@@ -100,16 +100,16 @@ export default function RecordModal({ sessionId, onClose, onSuccess }) {
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-      <div className="bg-slate-800 rounded-xl shadow-2xl max-w-md w-full mx-4">
+      <div className="modal-shell max-w-md mx-4">
         {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b border-slate-700">
+        <div className="modal-header">
           <h2 className="text-xl font-bold text-white">
             {recordType === 'race' && 'Aggiungi PB Gara'}
             {recordType === 'training' && 'Aggiungi PB Allenamento'}
             {recordType === 'strength' && 'Aggiungi Massimale'}
             {recordType === 'injury' && 'Registra Infortunio'}
           </h2>
-          <button onClick={onClose} className="text-gray-400 hover:text-white transition-colors">
+          <button onClick={onClose} className="btn-icon btn-ghost">
             <X className="w-6 h-6" />
           </button>
         </div>
@@ -376,7 +376,7 @@ export default function RecordModal({ sessionId, onClose, onSuccess }) {
 
           {/* Checkbox PB */}
           {recordType !== 'injury' && (
-            <label className="flex items-center gap-2 text-gray-300 cursor-pointer">
+            <label className="flex items-center gap-2 text-gray-300 cursor-pointer link-muted">
               <input
                 type="checkbox"
                 name="is_personal_best"
@@ -419,14 +419,14 @@ export default function RecordModal({ sessionId, onClose, onSuccess }) {
             <button
               type="button"
               onClick={onClose}
-              className="flex-1 bg-slate-700 hover:bg-slate-600 text-white py-2 rounded-lg transition-colors"
+              className="flex-1 py-2 btn-secondary"
             >
               Annulla
             </button>
             <button
               type="submit"
               disabled={loading}
-              className="flex-1 bg-primary-600 hover:bg-primary-700 disabled:bg-primary-800 text-white py-2 rounded-lg transition-colors font-medium"
+              className="flex-1 py-2 btn-primary"
             >
               {loading ? 'Salvataggio...' : 'Salva Record'}
             </button>
